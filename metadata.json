@@ -1,6 +1,6 @@
 {
   "name": "Harena",
-  "description": "An intelligent e-wallet for financial tracking, real-time transaction reporting, and AI-powered financial recommendations in Malagasy Ariary (MGA).",
+  "description": "Portefeuille intelligent avec analyses IA, budgets, objectifs d'épargne et catégories personnalisables.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

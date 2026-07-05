@@ -1,0 +1,867 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {
+  User,
+  Wallet,
+  TransactionCategory,
+  WalletTransaction,
+  WalletBalanceSnapshot,
+  Budget,
+  Goal,
+  TransactionAnalysis,
+  WalletRecommendation,
+  Sex,
+  WalletType,
+  TransactionType,
+  TransactionStatus,
+  BudgetPeriod,
+  GoalStatus
+} from '../types';
+
+export function formatCurrency(amount: number, currency: string): string {
+  if (currency === 'MGA' || currency === 'ARIARY') {
+    return `${Math.round(amount).toLocaleString('fr-FR')} Ar`;
+  }
+  try {
+    return amount.toLocaleString('fr-FR', { style: 'currency', currency });
+  } catch (_) {
+    return `${amount.toLocaleString('fr-FR')} ${currency}`;
+  }
+}
+
+const API_BASE_URL = 'https://harena-api-ji5b.onrender.com';
+
+// Local storage keys
+const TOKEN_KEY = 'harena_token';
+const USER_KEY = 'harena_user';
+const DEMO_MODE_KEY = 'harena_demo_mode';
+
+// Helper to determine if we are in demo mode
+export function isDemoMode(): boolean {
+  return localStorage.getItem(DEMO_MODE_KEY) === 'true';
+}
+
+export function setDemoMode(active: boolean) {
+  localStorage.setItem(DEMO_MODE_KEY, active ? 'true' : 'false');
+  if (active) {
+    // Set a mock user
+    localStorage.setItem(USER_KEY, JSON.stringify(mockUser));
+    localStorage.setItem(TOKEN_KEY, 'demo-token-12345');
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  }
+}
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getCurrentUser(): User | null {
+  const userStr = localStorage.getItem(USER_KEY);
+  if (!userStr) return null;
+  try {
+    return JSON.parse(userStr) as User;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function setCurrentUser(user: User) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+export function logout() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(DEMO_MODE_KEY);
+}
+
+// Custom request wrapper to handle Authorization, CORS, and Demo Fallbacks
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  if (isDemoMode()) {
+    return handleDemoRequest<T>(path, options);
+  }
+
+  const token = getToken();
+  const headers = new Headers(options.headers || {});
+  
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    let errorMessage = 'Une erreur est survenue';
+    try {
+      const errBody = await response.json();
+      errorMessage = errBody.message || errorMessage;
+    } catch (_) {
+      errorMessage = `Erreur serveur (${response.status})`;
+    }
+    throw new Error(errorMessage);
+  }
+
+  // Handle empty responses
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
+// Real API methods
+export const api = {
+  async ping(): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ping`);
+      return response.ok;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  async signin(dto: any): Promise<{ access_token: string; user: User }> {
+    if (isDemoMode()) {
+      return { access_token: 'demo-token-12345', user: mockUser };
+    }
+    const response = await request<{ access_token: string }>('/auth/signin', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+    setToken(response.access_token);
+    
+    // Retrieve logged in user info
+    const user = await this.whoami();
+    setCurrentUser(user);
+    return { access_token: response.access_token, user };
+  },
+
+  async signup(dto: any): Promise<User> {
+    if (isDemoMode()) {
+      return mockUser;
+    }
+    const response = await request<User[]>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+    // Return the first user in the returned list
+    return Array.isArray(response) ? response[0] : (response as any);
+  },
+
+  async whoami(): Promise<User> {
+    if (isDemoMode()) {
+      return mockUser;
+    }
+    return request<User>('/auth/whoami');
+  },
+
+  // Wallets
+  async getWallets(userId: string): Promise<Wallet[]> {
+    return request<Wallet[]>(`/users/${userId}/wallets`);
+  },
+
+  async createWallet(userId: string, wallet: Partial<Wallet>): Promise<Wallet> {
+    return request<Wallet>(`/users/${userId}/wallets`, {
+      method: 'PUT',
+      body: JSON.stringify(wallet),
+    });
+  },
+
+  async getWalletById(userId: string, walletId: string): Promise<Wallet> {
+    return request<Wallet>(`/users/${userId}/wallets/${walletId}`);
+  },
+
+  async getCurrentBalance(userId: string, walletId: string): Promise<WalletBalanceSnapshot> {
+    return request<WalletBalanceSnapshot>(`/users/${userId}/wallets/${walletId}/balance`);
+  },
+
+  async getBalanceHistory(
+    userId: string,
+    walletId: string,
+    from?: string,
+    to?: string
+  ): Promise<WalletBalanceSnapshot[]> {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<WalletBalanceSnapshot[]>(`/users/${userId}/wallets/${walletId}/balance/history${query}`);
+  },
+
+  // Transactions
+  async getTransactions(
+    userId: string,
+    walletId: string,
+    filters?: { from?: string; to?: string; status?: TransactionStatus; type?: TransactionType }
+  ): Promise<WalletTransaction[]> {
+    const params = new URLSearchParams();
+    if (filters?.from) params.append('from', filters.from);
+    if (filters?.to) params.append('to', filters.to);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.type) params.append('type', filters.type);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<WalletTransaction[]>(`/users/${userId}/wallets/${walletId}/transactions${query}`);
+  },
+
+  async createTransaction(
+    userId: string,
+    walletId: string,
+    transaction: Partial<WalletTransaction>
+  ): Promise<WalletTransaction> {
+    return request<WalletTransaction>(`/users/${userId}/wallets/${walletId}/transactions`, {
+      method: 'PUT',
+      body: JSON.stringify(transaction),
+    });
+  },
+
+  async getTransactionById(userId: string, transactionId: string): Promise<WalletTransaction> {
+    return request<WalletTransaction>(`/users/${userId}/transactions/${transactionId}`);
+  },
+
+  // Categories
+  async getCategories(userId: string, name?: string): Promise<TransactionCategory[]> {
+    const query = name ? `?name=${encodeURIComponent(name)}` : '';
+    return request<TransactionCategory[]>(`/users/${userId}/categories${query}`);
+  },
+
+  async createCategory(userId: string, categories: Partial<TransactionCategory>[]): Promise<TransactionCategory[]> {
+    return request<TransactionCategory[]>(`/users/${userId}/categories`, {
+      method: 'PUT',
+      body: JSON.stringify(categories),
+    });
+  },
+
+  async deleteCategory(userId: string, categoryId: string): Promise<TransactionCategory> {
+    return request<TransactionCategory>(`/users/${userId}/categories/${categoryId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Budgets
+  async getBudgets(
+    userId: string,
+    filters?: { budget_period?: BudgetPeriod; page?: number; page_size?: number }
+  ): Promise<Budget[]> {
+    const params = new URLSearchParams();
+    if (filters?.budget_period) params.append('budget_period', filters.budget_period);
+    if (filters?.page) params.append('page', String(filters.page));
+    if (filters?.page_size) params.append('page_size', String(filters.page_size));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<Budget[]>(`/users/${userId}/budgets${query}`);
+  },
+
+  async getBudgetsByWallet(userId: string, walletId: string): Promise<Budget[]> {
+    return request<Budget[]>(`/users/${userId}/wallets/${walletId}/budgets`);
+  },
+
+  async updateBudget(userId: string, budget: Partial<Budget>): Promise<Budget> {
+    return request<Budget>(`/users/${userId}/budgets`, {
+      method: 'PUT',
+      body: JSON.stringify(budget),
+    });
+  },
+
+  async deleteBudget(userId: string, budgetId: string): Promise<Budget> {
+    return request<Budget>(`/users/${userId}/budgets/${budgetId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Goals
+  async getGoals(userId: string, status?: GoalStatus): Promise<Goal[]> {
+    const query = status ? `?status=${status}` : '';
+    return request<Goal[]>(`/users/${userId}/goals${query}`);
+  },
+
+  async getGoalsByWallet(userId: string, walletId: string, status?: GoalStatus): Promise<Goal[]> {
+    const query = status ? `?status=${status}` : '';
+    return request<Goal[]>(`/users/${userId}/wallets/${walletId}/goals${query}`);
+  },
+
+  async createGoal(userId: string, walletId: string, goal: Partial<Goal>): Promise<Goal> {
+    return request<Goal>(`/users/${userId}/wallets/${walletId}/goals`, {
+      method: 'PUT',
+      body: JSON.stringify(goal),
+    });
+  },
+
+  async deleteGoal(userId: string, goalId: string): Promise<Goal> {
+    return request<Goal>(`/users/${userId}/goals/${goalId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // AI Insights
+  async getTransactionAnalysis(
+    transactionId: string,
+    page: number = 1,
+    pageSize: number = 10
+  ): Promise<TransactionAnalysis[]> {
+    if (isDemoMode()) {
+      return mockTransactionAnalyses.filter(a => a.transaction_id === transactionId);
+    }
+    return request<TransactionAnalysis[]>(`/transactions/${transactionId}/analysis?page=${page}&page_size=${pageSize}`);
+  },
+
+  async getRecommendations(
+    walletId: string,
+    page: number = 1,
+    pageSize: number = 10
+  ): Promise<WalletRecommendation[]> {
+    if (isDemoMode()) {
+      return mockRecommendations.filter(r => r.wallet_id === walletId);
+    }
+    return request<WalletRecommendation[]>(`/wallets/${walletId}/recommendations?page=${page}&page_size=${pageSize}`);
+  }
+};
+
+// ==========================================
+// DEMO / FALLBACK DATA STORE
+// ==========================================
+
+const mockUser: User = {
+  id: 'usr-demo-123',
+  firstname: 'Adriano',
+  lastname: 'Hei',
+  username: 'adriano123',
+  email: 'hei.adriano.4@gmail.com',
+  registered_datetime: '2026-01-14T10:00:00Z',
+  sex: 'M',
+};
+
+const mockWallets: Wallet[] = [
+  {
+    id: 'w-1',
+    user_id: 'usr-demo-123',
+    name: 'Portefeuille Courant',
+    currency: 'MGA',
+    type: 'PERSONAL',
+    creation_datetime: '2026-01-14T10:15:00Z',
+    updated_datetime: '2026-07-05T10:00:00Z',
+  },
+  {
+    id: 'w-2',
+    user_id: 'usr-demo-123',
+    name: 'Compte d\'Épargne Projets',
+    currency: 'MGA',
+    type: 'SAVINGS',
+    creation_datetime: '2026-01-15T12:00:00Z',
+    updated_datetime: '2026-07-05T10:00:00Z',
+  },
+  {
+    id: 'w-3',
+    user_id: 'usr-demo-123',
+    name: 'Harena Business',
+    currency: 'MGA',
+    type: 'BUSINESS',
+    creation_datetime: '2026-02-01T08:00:00Z',
+    updated_datetime: '2026-07-05T10:00:00Z',
+  },
+];
+
+const mockCategories: TransactionCategory[] = [
+  { id: 'cat-sys-1', user_id: 'system', name: 'Alimentation & Courses', icon: 'ShoppingBag', color: '#EF4444', is_system: true, creation_datetime: '2026-01-01T00:00:00Z' },
+  { id: 'cat-sys-2', user_id: 'system', name: 'Transport & Carburant', icon: 'Car', color: '#F59E0B', is_system: true, creation_datetime: '2026-01-01T00:00:00Z' },
+  { id: 'cat-sys-3', user_id: 'system', name: 'Loisirs & Divertissement', icon: 'Film', color: '#3B82F6', is_system: true, creation_datetime: '2026-01-01T00:00:00Z' },
+  { id: 'cat-sys-4', user_id: 'system', name: 'Salaire & Revenus', icon: 'DollarSign', color: '#10B981', is_system: true, creation_datetime: '2026-01-01T00:00:00Z' },
+  { id: 'cat-sys-5', user_id: 'system', name: 'Abonnements & Logiciels', icon: 'CreditCard', color: '#8B5CF6', is_system: true, creation_datetime: '2026-01-01T00:00:00Z' },
+  { id: 'cat-sys-6', user_id: 'system', name: 'Logement & Factures', icon: 'Home', color: '#6B7280', is_system: true, creation_datetime: '2026-01-01T00:00:00Z' },
+];
+
+const mockTransactions: WalletTransaction[] = [
+  {
+    id: 'tx-1',
+    wallet: mockWallets[0],
+    category: mockCategories[3],
+    amount: 12500000,
+    type: 'INCOME',
+    status: 'COMPLETED',
+    description: 'Salaire Mensuel',
+    reference: 'SAL-2026-06',
+    source: 'Société GenTech',
+    transaction_datetime: '2026-06-30T09:00:00Z',
+    creation_datetime: '2026-06-30T09:00:00Z',
+    updated_datetime: '2026-06-30T09:00:00Z',
+  },
+  {
+    id: 'tx-2',
+    wallet: mockWallets[0],
+    category: mockCategories[0],
+    amount: 712500,
+    type: 'EXPENSE',
+    status: 'COMPLETED',
+    description: 'Courses hebdomadaires Supermarché',
+    reference: 'SUP-49294',
+    source: 'Carrefour Paris',
+    transaction_datetime: '2026-07-01T17:30:00Z',
+    creation_datetime: '2026-07-01T17:30:00Z',
+    updated_datetime: '2026-07-01T17:30:00Z',
+  },
+  {
+    id: 'tx-3',
+    wallet: mockWallets[0],
+    category: mockCategories[4],
+    amount: 80000,
+    type: 'SUBSCRIPTION',
+    status: 'COMPLETED',
+    description: 'Abonnement Netflix Premium',
+    reference: 'NETFLIX-JUL-26',
+    source: 'Netflix NV',
+    transaction_datetime: '2026-07-02T02:00:00Z',
+    creation_datetime: '2026-07-02T02:00:00Z',
+    updated_datetime: '2026-07-02T02:00:00Z',
+  },
+  {
+    id: 'tx-4',
+    wallet: mockWallets[0],
+    category: mockCategories[1],
+    amount: 175000,
+    type: 'EXPENSE',
+    status: 'COMPLETED',
+    description: 'Recharge carte Navigo',
+    reference: 'NAV-9204',
+    source: 'RATP Paris',
+    transaction_datetime: '2026-07-03T08:15:00Z',
+    creation_datetime: '2026-07-03T08:15:00Z',
+    updated_datetime: '2026-07-03T08:15:00Z',
+  },
+  {
+    id: 'tx-5',
+    wallet: mockWallets[0],
+    category: mockCategories[2],
+    amount: 425000,
+    type: 'EXPENSE',
+    status: 'COMPLETED',
+    description: 'Restaurant entre amis',
+    reference: 'REST-0932',
+    source: 'Le Petit Bistrot',
+    transaction_datetime: '2026-07-04T20:30:00Z',
+    creation_datetime: '2026-07-04T20:30:00Z',
+    updated_datetime: '2026-07-04T20:30:00Z',
+  },
+  {
+    id: 'tx-6',
+    wallet: mockWallets[0],
+    category: mockCategories[0],
+    amount: 64000,
+    type: 'EXPENSE',
+    status: 'PENDING',
+    description: 'Boulangerie déjeuner',
+    reference: 'BOUL-83',
+    source: 'Boulangerie Artisanale',
+    transaction_datetime: '2026-07-05T08:45:00Z',
+    creation_datetime: '2026-07-05T08:45:00Z',
+    updated_datetime: '2026-07-05T08:45:00Z',
+  },
+  {
+    id: 'tx-7',
+    wallet: mockWallets[1],
+    category: mockCategories[3],
+    amount: 2500000,
+    type: 'TRANSFER',
+    status: 'COMPLETED',
+    description: 'Épargne automatique mensuelle',
+    reference: 'TRF-EP-01',
+    source: 'Portefeuille Courant',
+    transaction_datetime: '2026-07-01T00:05:00Z',
+    creation_datetime: '2026-07-01T00:05:00Z',
+    updated_datetime: '2026-07-01T00:05:00Z',
+  },
+];
+
+const mockBudgets: Budget[] = [
+  {
+    id: 'b-1',
+    wallet: mockWallets[0],
+    category: mockCategories[0],
+    limit_amount: 2500000,
+    spent_amount: 776500,
+    is_reserved: false,
+    period_type: 'MONTHLY',
+    start_date: '2026-07-01',
+    end_date: '2026-07-31',
+    creation_datetime: '2026-07-01T00:00:00Z',
+  },
+  {
+    id: 'b-2',
+    wallet: mockWallets[0],
+    category: mockCategories[2],
+    limit_amount: 1000000,
+    spent_amount: 425000,
+    is_reserved: false,
+    period_type: 'MONTHLY',
+    start_date: '2026-07-01',
+    end_date: '2026-07-31',
+    creation_datetime: '2026-07-01T00:00:00Z',
+  },
+  {
+    id: 'b-3',
+    wallet: mockWallets[0],
+    category: mockCategories[1],
+    limit_amount: 750000,
+    spent_amount: 175000,
+    is_reserved: false,
+    period_type: 'MONTHLY',
+    start_date: '2026-07-01',
+    end_date: '2026-07-31',
+    creation_datetime: '2026-07-01T00:00:00Z',
+  }
+];
+
+const mockGoals: Goal[] = [
+  {
+    id: 'g-1',
+    wallet: mockWallets[1],
+    name: 'Fonds d\'urgence 6 mois',
+    target_amount: 50000000,
+    current_amount: 22500000,
+    deadline: '2026-12-31',
+    status: 'IN_PROGRESS',
+    creation_datetime: '2026-01-15T12:00:00Z',
+  },
+  {
+    id: 'g-2',
+    wallet: mockWallets[1],
+    name: 'Voyage au Japon',
+    target_amount: 15000000,
+    current_amount: 6000000,
+    deadline: '2026-09-30',
+    status: 'IN_PROGRESS',
+    creation_datetime: '2026-03-10T15:00:00Z',
+  }
+];
+
+const mockTransactionAnalyses: TransactionAnalysis[] = [
+  {
+    id: 'an-1',
+    transaction_id: 'tx-2',
+    predicted_category: 'Alimentation & Courses',
+    anomaly_score: 0.12,
+    financial_health_score: 0.85,
+    sentiment: 'NEUTRAL',
+    creation_datetime: '2026-07-01T17:35:00Z',
+  },
+  {
+    id: 'an-2',
+    transaction_id: 'tx-5',
+    predicted_category: 'Loisirs & Divertissement',
+    anomaly_score: 0.45, // Slightly higher because restaurant spending is less regular
+    financial_health_score: 0.72,
+    sentiment: 'HAPPY',
+    creation_datetime: '2026-07-04T20:35:00Z',
+  }
+];
+
+const mockRecommendations: WalletRecommendation[] = [
+  {
+    id: 'rec-1',
+    wallet_id: 'w-1',
+    type: 'SAVINGS_ADVICE',
+    context: 'Analyse des dépenses de loisirs',
+    prompt: 'Optimisation du budget loisirs',
+    response: 'Vous avez dépensé 425 000 Ar en loisirs cette semaine, soit 42% de votre budget mensuel loisirs. Pour atteindre votre objectif d\'épargne "Voyage au Japon", essayez de limiter les dépenses de divertissement à 150 000 Ar la semaine prochaine.',
+    confidence_score: 0.92,
+    expires_at: '2026-07-12T10:00:00Z',
+    creation_datetime: '2026-07-05T09:00:00Z',
+  },
+  {
+    id: 'rec-2',
+    wallet_id: 'w-1',
+    type: 'BUDGET_WARNING',
+    context: 'Catégorie Alimentation',
+    prompt: 'Alerte dépassement alimentation',
+    response: 'Vos dépenses d\'alimentation progressent plus vite que d\'habitude ce mois-ci (+12% par rapport à juin). Nous vous conseillons de planifier vos repas pour optimiser vos courses et rester sous votre limite de 2 500 000 Ar.',
+    confidence_score: 0.88,
+    expires_at: '2026-07-10T10:00:00Z',
+    creation_datetime: '2026-07-05T09:30:00Z',
+  }
+];
+
+// In-Memory mutable database for Demo Mode
+let demoWallets = [...mockWallets];
+let demoTransactions = [...mockTransactions];
+let demoCategories = [...mockCategories];
+let demoBudgets = [...mockBudgets];
+let demoGoals = [...mockGoals];
+
+function handleDemoRequest<T>(path: string, options: RequestInit): T {
+  // Parsing parameters and pathways
+  const parts = path.split('/').filter(Boolean); // e.g. ["users", "usr-id", "wallets"]
+
+  // POST /auth/signin
+  if (path === '/auth/signin') {
+    return { access_token: 'demo-token-12345', user: mockUser } as unknown as T;
+  }
+  // POST /auth/signup
+  if (path === '/auth/signup') {
+    return [mockUser] as unknown as T;
+  }
+  // GET /auth/whoami
+  if (path === '/auth/whoami') {
+    return mockUser as unknown as T;
+  }
+
+  // GET /users/{user_id}/wallets
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts.length === 3) {
+    if (options.method === 'PUT') {
+      const body = JSON.parse(options.body as string);
+      const newWallet: Wallet = {
+        id: `w-${Date.now()}`,
+        user_id: parts[1],
+        name: body.name || 'Nouveau Portefeuille',
+        currency: body.currency || 'MGA',
+        type: body.type || 'PERSONAL',
+        creation_datetime: new Date().toISOString(),
+        updated_datetime: new Date().toISOString()
+      };
+      demoWallets.push(newWallet);
+      return newWallet as unknown as T;
+    }
+    return demoWallets as unknown as T;
+  }
+
+  // GET /users/{user_id}/wallets/{wallet_id}
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts.length === 4) {
+    const wallet = demoWallets.find(w => w.id === parts[3]);
+    if (!wallet) throw new Error('Portefeuille introuvable');
+    return wallet as unknown as T;
+  }
+
+  // GET /users/{user_id}/wallets/{wallet_id}/balance
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts[4] === 'balance' && parts.length === 5) {
+    const wallet = demoWallets.find(w => w.id === parts[3]);
+    if (!wallet) throw new Error('Portefeuille introuvable');
+    // Calculate sum of transactions
+    const walletTxs = demoTransactions.filter(t => t.wallet.id === parts[3] && t.status === 'COMPLETED');
+    const balance = walletTxs.reduce((sum, tx) => {
+      if (tx.type === 'INCOME' || tx.type === 'REFUND') return sum + tx.amount;
+      if (tx.type === 'EXPENSE' || tx.type === 'SUBSCRIPTION') return sum - tx.amount;
+      if (tx.type === 'TRANSFER') {
+        // If it's a transfer and this is the source wallet, deduct. If it's destination, add.
+        // For simplicity in demo, let's treat transfer out of personal as expense and into savings as income
+        return wallet.type === 'SAVINGS' ? sum + tx.amount : sum - tx.amount;
+      }
+      return sum;
+    }, wallet.type === 'SAVINGS' ? 4500000 : 1800000); // base initial balance for demo
+    
+    return {
+      id: `bal-${Date.now()}`,
+      wallet,
+      balance,
+      snapshot_datetime: new Date().toISOString(),
+      creation_datetime: new Date().toISOString()
+    } as unknown as T;
+  }
+
+  // GET /users/{user_id}/wallets/{wallet_id}/balance/history
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts[4] === 'balance' && parts[5] === 'history') {
+    const wallet = demoWallets.find(w => w.id === parts[3]);
+    if (!wallet) throw new Error('Portefeuille introuvable');
+    // Generate some mock historical data points for the graph
+    const dates = ['2026-06-29', '2026-06-30', '2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05'];
+    let baseBal = wallet.type === 'SAVINGS' ? 22000000 : 1500000;
+    return dates.map((d, index) => {
+      baseBal += index * (wallet.type === 'SAVINGS' ? 500000 : -50000);
+      return {
+        id: `bal-hist-${index}`,
+        wallet,
+        balance: baseBal,
+        snapshot_datetime: `${d}T12:00:00Z`,
+        creation_datetime: `${d}T12:00:00Z`
+      };
+    }) as unknown as T;
+  }
+
+  // GET/PUT /users/{user_id}/wallets/{wallet_id}/transactions
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts[4] === 'transactions') {
+    const walletId = parts[3];
+    const wallet = demoWallets.find(w => w.id === walletId);
+    if (!wallet) throw new Error('Portefeuille introuvable');
+
+    if (options.method === 'PUT') {
+      const body = JSON.parse(options.body as string);
+      const categoryId = body.category?.id || demoCategories[0].id;
+      const category = demoCategories.find(c => c.id === categoryId) || demoCategories[0];
+      const newTx: WalletTransaction = {
+        id: `tx-${Date.now()}`,
+        wallet,
+        category,
+        amount: Number(body.amount) || 0,
+        type: body.type || 'EXPENSE',
+        status: body.status || 'COMPLETED',
+        description: body.description || 'Sans description',
+        reference: body.reference || `REF-${Math.floor(Math.random() * 10000)}`,
+        source: body.source || 'Harena Direct',
+        transaction_datetime: body.transaction_datetime || new Date().toISOString(),
+        creation_datetime: new Date().toISOString(),
+        updated_datetime: new Date().toISOString()
+      };
+      demoTransactions.unshift(newTx); // Add to beginning
+
+      // Dynamically update spent_amount in budget if matches category
+      const matchedBudget = demoBudgets.find(b => b.category.id === categoryId && b.wallet.id === walletId);
+      if (matchedBudget && newTx.type === 'EXPENSE') {
+        matchedBudget.spent_amount += newTx.amount;
+      }
+
+      // Generate mock transaction analysis immediately for this transaction
+      const randomAnomaly = Math.random() < 0.15 ? 0.85 : 0.05; // 15% chance of high anomaly
+      const healthScore = Math.max(0.1, 1 - (newTx.amount / 1000));
+      const mockAnalysis: TransactionAnalysis = {
+        id: `an-${Date.now()}`,
+        transaction_id: newTx.id,
+        predicted_category: category.name,
+        anomaly_score: Number(randomAnomaly.toFixed(2)),
+        financial_health_score: Number(healthScore.toFixed(2)),
+        sentiment: newTx.type === 'INCOME' ? 'HAPPY' : (newTx.amount > 100 ? 'CONCERNED' : 'NEUTRAL'),
+        creation_datetime: new Date().toISOString()
+      };
+      mockTransactionAnalyses.push(mockAnalysis);
+
+      return newTx as unknown as T;
+    }
+
+    return demoTransactions.filter(t => t.wallet.id === walletId) as unknown as T;
+  }
+
+  // GET /users/{user_id}/categories
+  if (parts[0] === 'users' && parts[2] === 'categories' && parts.length === 3) {
+    if (options.method === 'PUT') {
+      const body = JSON.parse(options.body as string);
+      const created: TransactionCategory[] = [];
+      const items = Array.isArray(body) ? body : [body];
+      for (const item of items) {
+        const newCat: TransactionCategory = {
+          id: `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          user_id: parts[1],
+          name: item.name || 'Nouvelle Catégorie',
+          icon: item.icon || 'HelpCircle',
+          color: item.color || '#3B82F6',
+          is_system: false,
+          creation_datetime: new Date().toISOString()
+        };
+        demoCategories.push(newCat);
+        created.push(newCat);
+      }
+      return created as unknown as T;
+    }
+    return demoCategories as unknown as T;
+  }
+
+  // DELETE /users/{user_id}/categories/{category_id}
+  if (parts[0] === 'users' && parts[2] === 'categories' && parts.length === 4) {
+    const catId = parts[3];
+    const cat = demoCategories.find(c => c.id === catId);
+    demoCategories = demoCategories.filter(c => c.id !== catId);
+    return cat as unknown as T;
+  }
+
+  // GET/PUT /users/{user_id}/budgets
+  if (parts[0] === 'users' && parts[2] === 'budgets' && parts.length === 3) {
+    if (options.method === 'PUT') {
+      const body = JSON.parse(options.body as string);
+      const catId = body.category?.id || demoCategories[0].id;
+      const category = demoCategories.find(c => c.id === catId) || demoCategories[0];
+      const walletId = body.wallet?.id || demoWallets[0].id;
+      const wallet = demoWallets.find(w => w.id === walletId) || demoWallets[0];
+
+      // Check if exists
+      const existingIndex = demoBudgets.findIndex(b => b.category.id === catId && b.wallet.id === walletId);
+      if (existingIndex >= 0) {
+        demoBudgets[existingIndex] = {
+          ...demoBudgets[existingIndex],
+          limit_amount: Number(body.limit_amount) || demoBudgets[existingIndex].limit_amount,
+          is_reserved: body.is_reserved ?? demoBudgets[existingIndex].is_reserved,
+          period_type: body.period_type || demoBudgets[existingIndex].period_type,
+        };
+        return demoBudgets[existingIndex] as unknown as T;
+      }
+
+      const newBudget: Budget = {
+        id: `b-${Date.now()}`,
+        wallet,
+        category,
+        limit_amount: Number(body.limit_amount) || 1000000,
+        spent_amount: 0,
+        is_reserved: body.is_reserved || false,
+        period_type: body.period_type || 'MONTHLY',
+        start_date: new Date().toISOString().split('T')[0],
+        end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        creation_datetime: new Date().toISOString()
+      };
+      demoBudgets.push(newBudget);
+      return newBudget as unknown as T;
+    }
+    return demoBudgets as unknown as T;
+  }
+
+  // DELETE /users/{user_id}/budgets/{budget_id}
+  if (parts[0] === 'users' && parts[2] === 'budgets' && parts.length === 4) {
+    const bId = parts[3];
+    const budget = demoBudgets.find(b => b.id === bId);
+    demoBudgets = demoBudgets.filter(b => b.id !== bId);
+    return budget as unknown as T;
+  }
+
+  // GET /users/{user_id}/wallets/{wallet_id}/budgets
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts[4] === 'budgets') {
+    return demoBudgets.filter(b => b.wallet.id === parts[3]) as unknown as T;
+  }
+
+  // GET /users/{user_id}/goals
+  if (parts[0] === 'users' && parts[2] === 'goals' && parts.length === 3) {
+    return demoGoals as unknown as T;
+  }
+
+  // GET/PUT /users/{user_id}/wallets/{wallet_id}/goals
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts[4] === 'goals') {
+    const walletId = parts[3];
+    const wallet = demoWallets.find(w => w.id === walletId) || demoWallets[0];
+
+    if (options.method === 'PUT') {
+      const body = JSON.parse(options.body as string);
+      const newGoal: Goal = {
+        id: `g-${Date.now()}`,
+        wallet,
+        name: body.name || 'Nouvel objectif d\'épargne',
+        target_amount: Number(body.target_amount) || 5000000,
+        current_amount: Number(body.current_amount) || 0,
+        deadline: body.deadline || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        status: body.status || 'IN_PROGRESS',
+        creation_datetime: new Date().toISOString()
+      };
+      demoGoals.push(newGoal);
+      return newGoal as unknown as T;
+    }
+    return demoGoals.filter(g => g.wallet.id === walletId) as unknown as T;
+  }
+
+  // DELETE /users/{user_id}/goals/{goal_id}
+  if (parts[0] === 'users' && parts[2] === 'goals' && parts.length === 4) {
+    const gId = parts[3];
+    const goal = demoGoals.find(g => g.id === gId);
+    demoGoals = demoGoals.filter(g => g.id !== gId);
+    return goal as unknown as T;
+  }
+
+  // Fallback default
+  return {} as unknown as T;
+}

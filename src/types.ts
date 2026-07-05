@@ -3,44 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export enum WalletType {
-  PERSONAL = "PERSONAL",
-  SAVINGS = "SAVINGS",
-  BUSINESS = "BUSINESS"
-}
+export type Sex = 'M' | 'F';
 
-export enum TransactionType {
-  INCOME = "INCOME",
-  EXPENSE = "EXPENSE",
-  TRANSFER = "TRANSFER",
-  REFUND = "REFUND",
-  SUBSCRIPTION = "SUBSCRIPTION"
-}
+export type WalletType = 'PERSONAL' | 'SAVINGS' | 'BUSINESS';
 
-export enum TransactionStatus {
-  PENDING = "PENDING",
-  COMPLETED = "COMPLETED",
-  FAILED = "FAILED",
-  CANCELLED = "CANCELLED"
-}
+export type TransactionType = 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'REFUND' | 'SUBSCRIPTION';
 
-export enum GoalStatus {
-  IN_PROGRESS = "IN_PROGRESS",
-  COMPLETED = "COMPLETED",
-  CANCELLED = "CANCELLED"
-}
+export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
-export enum BudgetPeriod {
-  DAILY = "DAILY",
-  WEEKLY = "WEEKLY",
-  MONTHLY = "MONTHLY",
-  YEARLY = "YEARLY"
-}
+export type GoalStatus = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
-export enum Sex {
-  M = "M",
-  F = "F"
-}
+export type BudgetPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
 export interface User {
   id: string;
@@ -56,7 +29,7 @@ export interface Wallet {
   id: string;
   user_id: string;
   name: string;
-  currency: string; // MGA as primary currency
+  currency: string;
   type: WalletType;
   creation_datetime: string;
   updated_datetime: string;
@@ -66,8 +39,8 @@ export interface TransactionCategory {
   id: string;
   user_id: string;
   name: string;
-  icon: string; // lucide icon name (e.g. "ShoppingBag", "TrendingUp", "Coffee", etc.)
-  color: string; // hex code or tailwind color name
+  icon: string;
+  color: string;
   is_system: boolean;
   creation_datetime: string;
 }
@@ -80,8 +53,8 @@ export interface WalletTransaction {
   type: TransactionType;
   status: TransactionStatus;
   description: string;
-  reference: string;
-  source: string;
+  reference?: string;
+  source?: string;
   transaction_datetime: string;
   creation_datetime: string;
   updated_datetime: string;
@@ -103,8 +76,8 @@ export interface Budget {
   spent_amount: number;
   is_reserved: boolean;
   period_type: BudgetPeriod;
-  start_date: string; // YYYY-MM-DD
-  end_date: string; // YYYY-MM-DD
+  start_date: string;
+  end_date: string;
   creation_datetime: string;
 }
 
@@ -114,8 +87,18 @@ export interface Goal {
   name: string;
   target_amount: number;
   current_amount: number;
-  deadline: string; // YYYY-MM-DD
+  deadline: string;
   status: GoalStatus;
+  creation_datetime: string;
+}
+
+export interface TransactionAnalysis {
+  id: string;
+  transaction_id: string;
+  predicted_category: string;
+  anomaly_score: number;
+  financial_health_score: number;
+  sentiment: string;
   creation_datetime: string;
 }
 
@@ -131,19 +114,12 @@ export interface WalletRecommendation {
   creation_datetime: string;
 }
 
-export interface TransactionAnalysis {
-  id: string;
-  transaction_id: string;
-  predicted_category: string;
-  anomaly_score: number; // 0.0 - 1.0
-  financial_health_score: number; // 0 - 100
-  sentiment: string;
-  creation_datetime: string;
-}
-
 export interface RefreshTokenResponse {
   token_type: string;
-  access_token: string;
+  issued_at?: string;
+  expires_at?: string;
   access_expires_in: number;
-  refresh_token: string;
+  refresh_token?: string;
+  access_token: string;
+  id_token?: string;
 }

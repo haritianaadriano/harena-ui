@@ -1,47 +1,21 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig } from 'vite';
-import ts from 'typescript';
-
-function angularTs() {
-  return {
-    name: 'angular-ts',
-    transform(code: string, id: string) {
-      if (id.endsWith('.ts') && !id.includes('node_modules')) {
-        const result = ts.transpileModule(code, {
-          compilerOptions: {
-            target: ts.ScriptTarget.ES2022,
-            module: ts.ModuleKind.ESNext,
-            experimentalDecorators: true,
-            emitDecoratorMetadata: true,
-            useDefineForClassFields: false,
-          }
-        });
-        return {
-          code: result.outputText,
-          map: result.sourceMapText
-        };
-      }
-      return null;
-    }
-  };
-}
+import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [angularTs(), tailwindcss()],
+    plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
+      // HMR is disabled in AI Studio via DISABLE_HMR env var.
+      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
+      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
