@@ -128,20 +128,20 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
   };
 
   // Map Recharts data
-  const chartData = history.map(h => ({
-    date: new Date(h.snapshot_datetime).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
-    solde: h.balance
-  }));
+  const chartData = Array.isArray(history) ? history.map(h => ({
+    date: h.snapshot_datetime ? new Date(h.snapshot_datetime).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '',
+    solde: h.balance || 0
+  })) : [];
 
   // Card background styling based on wallet type
   const getCardStyle = (type: WalletType) => {
     switch (type) {
       case 'PERSONAL':
-        return 'from-emerald-600 via-teal-600 to-emerald-850 text-white shadow-lg shadow-emerald-500/10';
+        return 'from-cyan-500 via-sky-600 to-indigo-800 text-white shadow-lg shadow-cyan-500/25';
       case 'SAVINGS':
-        return 'from-emerald-700 via-teal-700 to-emerald-950 text-white shadow-lg shadow-teal-500/10';
+        return 'from-indigo-600 via-blue-700 to-cyan-800 text-white shadow-lg shadow-blue-500/25';
       case 'BUSINESS':
-        return 'from-slate-800 via-slate-900 to-slate-950 text-white border border-slate-850 shadow-lg shadow-slate-900/40';
+        return 'from-[#1e293b] via-[#0f172a] to-[#020617] text-white border border-slate-800 shadow-lg shadow-slate-950/50';
       default:
         return 'from-slate-700 to-slate-900 text-white';
     }
@@ -153,12 +153,12 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
       {/* Title Bar */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Gérer mes portefeuilles</h1>
-          <p className="text-sm text-slate-500">Créez et suivez vos différents comptes personnels, d'épargne et professionnels.</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Gérer mes portefeuilles</h1>
+          <p className="text-sm text-slate-400">Créez et suivez vos différents comptes personnels, d'épargne et professionnels.</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10 transition-all border border-emerald-500/30"
+          className="bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-500/25 transition-all border border-cyan-500/30"
         >
           <Plus className="h-4 w-4" />
           <span>Nouveau compte</span>
@@ -171,12 +171,12 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
         <div className="space-y-4 lg:col-span-1">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-2 mb-2">Mes comptes actifs</h3>
           {loading ? (
-            <div className="p-12 text-center bg-white rounded-3xl border border-slate-100 shadow-xs">
-              <span className="h-6 w-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin inline-block" />
+            <div className="p-12 text-center bg-[#0b1329] rounded-3xl border border-slate-800/80 shadow-sm">
+              <span className="h-6 w-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin inline-block" />
             </div>
           ) : wallets.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-3xl border border-slate-100 shadow-xs space-y-3">
-              <CreditCard className="h-8 w-8 text-slate-400 mx-auto" />
+            <div className="p-8 text-center bg-[#0b1329] rounded-3xl border border-slate-800/80 shadow-sm space-y-3">
+              <CreditCard className="h-8 w-8 text-slate-500 mx-auto" />
               <p className="text-slate-400 text-xs">Vous n'avez aucun compte. Créez-en un pour commencer !</p>
             </div>
           ) : (
@@ -191,36 +191,36 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
                     onClick={() => setSelectedWallet(w)}
                     className={`p-5 rounded-2xl cursor-pointer transition-all border text-left relative overflow-hidden group ${
                       isSelected 
-                        ? 'bg-white border-emerald-500 shadow-md ring-1 ring-emerald-500/20' 
-                        : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/50'
+                        ? 'bg-[#131f3d] border-cyan-500 shadow-md ring-1 ring-cyan-500/25' 
+                        : 'bg-[#0b1329] border-slate-800/80 hover:border-slate-700/85 hover:bg-[#131c35]/50'
                     }`}
                   >
                     {/* Visual accent bar inside selected */}
                     {isSelected && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-600" />
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-400" />
                     )}
 
                     <div className="flex items-center justify-between mb-2">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        w.type === 'SAVINGS' ? 'bg-amber-500/10 text-amber-600 border-amber-500/15' : 
-                        w.type === 'BUSINESS' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/15' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/15'
+                        w.type === 'SAVINGS' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
+                        w.type === 'BUSINESS' ? 'bg-[#0e2d5c] text-cyan-300 border-cyan-500/20' : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
                       }`}>
                         {w.type}
                       </span>
                       <span className="text-xs font-bold text-slate-400 font-mono">{w.currency}</span>
                     </div>
 
-                    <h4 className="font-semibold text-slate-800 text-sm group-hover:text-slate-900 transition-colors">
+                    <h4 className="font-semibold text-slate-200 text-sm group-hover:text-white transition-colors">
                       {w.name}
                     </h4>
 
-                    <div className="text-lg font-bold text-slate-900 tracking-tight mt-1 font-sans">
+                    <div className="text-lg font-bold text-white tracking-tight mt-1 font-sans">
                       {formatCurrency(balance, w.currency)}
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between text-[10px] text-slate-400">
+                    <div className="mt-4 flex items-center justify-between text-[10px] text-slate-500">
                       <span>Créé le {new Date(w.creation_datetime).toLocaleDateString('fr-FR')}</span>
-                      {isSelected && <span className="text-emerald-600 font-bold flex items-center gap-0.5">Actif <ChevronRight className="h-3 w-3" /></span>}
+                      {isSelected && <span className="text-cyan-400 font-bold flex items-center gap-0.5">Actif <ChevronRight className="h-3 w-3" /></span>}
                     </div>
                   </div>
                 );
@@ -272,18 +272,18 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
               </div>
 
               {/* Balance History Trend Chart */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4">
+              <div className="bg-[#0b1329] p-6 rounded-3xl border border-slate-800/80 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                      <BarChart3 className="h-4 w-4 text-emerald-600" />
+                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <BarChart3 className="h-4 w-4 text-cyan-400" />
                       <span>Évolution du solde (30 jours)</span>
                     </h3>
-                    <p className="text-xs text-slate-500 font-sans">Courbe historique des soldes du compte.</p>
+                    <p className="text-xs text-slate-400 font-sans">Courbe historique des soldes du compte.</p>
                   </div>
                   
                   <div className="text-right">
-                    <span className="text-xs text-emerald-600 font-bold flex items-center justify-end gap-1 font-sans">
+                    <span className="text-xs text-cyan-400 font-bold flex items-center justify-end gap-1 font-sans">
                       <TrendingUp className="h-3.5 w-3.5" />
                       <span>Analyse active</span>
                     </span>
@@ -292,45 +292,45 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
 
                 {historyLoading ? (
                   <div className="h-64 flex flex-col items-center justify-center space-y-2">
-                    <span className="h-8 w-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs text-slate-500 font-sans">Chargement des données...</span>
+                    <span className="h-8 w-8 border-3 border-cyan-500 border-t-transparent rounded-full animate-spin shadow-lg shadow-cyan-500/20" />
+                    <span className="text-xs text-slate-400 font-sans">Chargement des données...</span>
                   </div>
                 ) : chartData.length === 0 ? (
-                  <div className="h-64 flex flex-col items-center justify-center text-center p-6 space-y-2 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                    <Info className="h-8 w-8 text-slate-400" />
-                    <h4 className="font-semibold text-xs text-slate-500">Aucun historique disponible</h4>
-                    <p className="text-[11px] text-slate-400 max-w-xs">Enregistrez des transactions pour générer l'analyse historique du compte.</p>
+                  <div className="h-64 flex flex-col items-center justify-center text-center p-6 space-y-2 bg-[#131c35]/50 rounded-2xl border border-dashed border-slate-800">
+                    <Info className="h-8 w-8 text-slate-500" />
+                    <h4 className="font-semibold text-xs text-slate-400">Aucun historique disponible</h4>
+                    <p className="text-[11px] text-slate-500 max-w-xs">Enregistrez des transactions pour générer l'analyse historique du compte.</p>
                   </div>
                 ) : (
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
                         <XAxis 
                           dataKey="date" 
-                          stroke="#94a3b8" 
+                          stroke="#64748b" 
                           fontSize={10} 
                           tickLine={false} 
                           axisLine={false} 
                         />
                         <YAxis 
-                          stroke="#94a3b8" 
+                          stroke="#64748b" 
                           fontSize={10} 
                           tickLine={false} 
                           axisLine={false} 
                           tickFormatter={(val) => formatCurrency(val, selectedWallet.currency)} 
                         />
                         <Tooltip 
-                          contentStyle={{ background: '#ffffff', border: '1px solid #f1f5f9', borderRadius: '12px', color: '#1e293b', fontSize: '12px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)' }} 
-                          labelStyle={{ color: '#64748b', fontWeight: 'bold' }}
+                          contentStyle={{ background: '#0b1329', border: '1px solid #1e293b', borderRadius: '12px', color: '#f8fafc', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }} 
+                          labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
                           formatter={(value) => [formatCurrency(Number(value), selectedWallet.currency), 'Solde']}
                         />
                         <Line 
                           type="monotone" 
                           dataKey="solde" 
-                          stroke="#10b981" 
+                          stroke="#06b6d4" 
                           strokeWidth={3} 
-                          dot={{ r: 4, strokeWidth: 2, fill: '#ffffff', stroke: '#10b981' }} 
+                          dot={{ r: 4, strokeWidth: 2, fill: '#0b1329', stroke: '#22d3ee' }} 
                           activeDot={{ r: 6 }} 
                         />
                       </LineChart>
@@ -340,10 +340,10 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center min-h-[300px] text-center bg-white rounded-3xl border border-slate-100 p-8 space-y-4 shadow-xs">
-              <CreditCard className="h-12 w-12 text-slate-400" />
+            <div className="flex flex-col items-center justify-center min-h-[300px] text-center bg-[#0b1329] rounded-3xl border border-slate-800/80 p-8 space-y-4 shadow-sm">
+              <CreditCard className="h-12 w-12 text-slate-500" />
               <div className="space-y-1">
-                <h3 className="font-bold text-slate-800 text-sm">Sélectionnez un portefeuille</h3>
+                <h3 className="font-bold text-slate-200 text-sm">Sélectionnez un portefeuille</h3>
                 <p className="text-xs text-slate-400 max-w-sm">Choisissez l'un de vos portefeuilles sur la gauche pour afficher son historique et ses analyses intelligentes.</p>
               </div>
             </div>
@@ -354,33 +354,33 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
 
       {/* Wallet Creation Modal Dialog */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-sans">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-100 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-emerald-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs font-sans">
+          <div className="bg-[#0b1329] rounded-3xl max-w-md w-full p-6 shadow-xl border border-slate-800/80 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.5)]" />
             
-            <h3 className="text-lg font-bold text-slate-900 tracking-tight mb-1">
+            <h3 className="text-lg font-bold text-white tracking-tight mb-1">
               Créer un portefeuille Harena
             </h3>
-            <p className="text-xs text-slate-500 mb-4">
+            <p className="text-xs text-slate-400 mb-4">
               Ajoutez un nouveau compte pour mieux organiser vos finances.
             </p>
 
             {createError && (
-              <div className="p-3 bg-red-50 text-red-600 rounded-xl text-xs mb-4 border border-red-100">
+              <div className="p-3 bg-red-950/40 text-red-400 rounded-xl text-xs mb-4 border border-red-900/30">
                 {createError}
               </div>
             )}
 
             <form onSubmit={handleCreateWallet} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
                   Nom du portefeuille
                 </label>
                 <input
                   type="text"
                   required
                   placeholder="Ex: Épargne Vacances, Compte Courant..."
-                  className="px-3 py-2 w-full border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50 text-slate-800 placeholder-slate-400"
+                  className="px-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white placeholder-slate-500"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                 />
@@ -388,32 +388,32 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Type de compte
                   </label>
                   <select
-                    className="px-3 py-2 w-full border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50 text-slate-700"
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-slate-200"
                     value={newType}
                     onChange={(e) => setNewType(e.target.value as WalletType)}
                   >
-                    <option value="PERSONAL">Personnel</option>
-                    <option value="SAVINGS">Épargne</option>
-                    <option value="BUSINESS">Business</option>
+                    <option value="PERSONAL" className="bg-[#0b1329] text-white">Personnel</option>
+                    <option value="SAVINGS" className="bg-[#0b1329] text-white">Épargne</option>
+                    <option value="BUSINESS" className="bg-[#0b1329] text-white">Business</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Devise principale
                   </label>
                   <select
-                    className="px-3 py-2 w-full border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50 text-slate-700"
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-slate-200"
                     value={newCurrency}
                     onChange={(e) => setNewCurrency(e.target.value)}
                   >
-                    <option value="MGA">Ariary (MGA)</option>
-                    <option value="EUR">Euro (EUR)</option>
-                    <option value="USD">Dollar (USD)</option>
+                    <option value="MGA" className="bg-[#0b1329] text-white">Ariary (MGA)</option>
+                    <option value="EUR" className="bg-[#0b1329] text-white">Euro (EUR)</option>
+                    <option value="USD" className="bg-[#0b1329] text-white">Dollar (USD)</option>
                   </select>
                 </div>
               </div>
@@ -422,17 +422,17 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer"
+                  className="flex-1 border border-slate-800 hover:bg-[#131c35] text-slate-300 font-semibold py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={createLoading}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm disabled:opacity-50"
+                  className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-extrabold py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-md disabled:opacity-50"
                 >
                   {createLoading ? (
-                    <span className="inline-block h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span className="inline-block h-3.5 w-3.5 border-2 border-[#020617] border-t-transparent rounded-full animate-spin" />
                   ) : (
                     'Confirmer'
                   )}

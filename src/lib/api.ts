@@ -175,7 +175,8 @@ export const api = {
 
   // Wallets
   async getWallets(userId: string): Promise<Wallet[]> {
-    return request<Wallet[]>(`/users/${userId}/wallets`);
+    const res = await request<Wallet[]>(`/users/${userId}/wallets`);
+    return Array.isArray(res) ? res : [];
   },
 
   async createWallet(userId: string, wallet: Partial<Wallet>): Promise<Wallet> {
@@ -203,7 +204,14 @@ export const api = {
     if (from) params.append('from', from);
     if (to) params.append('to', to);
     const query = params.toString() ? `?${params.toString()}` : '';
-    return request<WalletBalanceSnapshot[]>(`/users/${userId}/wallets/${walletId}/balance/history${query}`);
+    const res = await request<any>(`/users/${userId}/wallets/${walletId}/balance/history${query}`);
+    if (Array.isArray(res)) return res;
+    if (res && typeof res === 'object') {
+      if (Array.isArray(res.snapshots)) return res.snapshots;
+      if (Array.isArray(res.history)) return res.history;
+      if (Array.isArray(res.data)) return res.data;
+    }
+    return [];
   },
 
   // Transactions
@@ -218,7 +226,8 @@ export const api = {
     if (filters?.status) params.append('status', filters.status);
     if (filters?.type) params.append('type', filters.type);
     const query = params.toString() ? `?${params.toString()}` : '';
-    return request<WalletTransaction[]>(`/users/${userId}/wallets/${walletId}/transactions${query}`);
+    const res = await request<WalletTransaction[]>(`/users/${userId}/wallets/${walletId}/transactions${query}`);
+    return Array.isArray(res) ? res : [];
   },
 
   async createTransaction(
@@ -239,7 +248,8 @@ export const api = {
   // Categories
   async getCategories(userId: string, name?: string): Promise<TransactionCategory[]> {
     const query = name ? `?name=${encodeURIComponent(name)}` : '';
-    return request<TransactionCategory[]>(`/users/${userId}/categories${query}`);
+    const res = await request<TransactionCategory[]>(`/users/${userId}/categories${query}`);
+    return Array.isArray(res) ? res : [];
   },
 
   async createCategory(userId: string, categories: Partial<TransactionCategory>[]): Promise<TransactionCategory[]> {
@@ -265,11 +275,13 @@ export const api = {
     if (filters?.page) params.append('page', String(filters.page));
     if (filters?.page_size) params.append('page_size', String(filters.page_size));
     const query = params.toString() ? `?${params.toString()}` : '';
-    return request<Budget[]>(`/users/${userId}/budgets${query}`);
+    const res = await request<Budget[]>(`/users/${userId}/budgets${query}`);
+    return Array.isArray(res) ? res : [];
   },
 
   async getBudgetsByWallet(userId: string, walletId: string): Promise<Budget[]> {
-    return request<Budget[]>(`/users/${userId}/wallets/${walletId}/budgets`);
+    const res = await request<Budget[]>(`/users/${userId}/wallets/${walletId}/budgets`);
+    return Array.isArray(res) ? res : [];
   },
 
   async updateBudget(userId: string, budget: Partial<Budget>): Promise<Budget> {
@@ -288,12 +300,14 @@ export const api = {
   // Goals
   async getGoals(userId: string, status?: GoalStatus): Promise<Goal[]> {
     const query = status ? `?status=${status}` : '';
-    return request<Goal[]>(`/users/${userId}/goals${query}`);
+    const res = await request<Goal[]>(`/users/${userId}/goals${query}`);
+    return Array.isArray(res) ? res : [];
   },
 
   async getGoalsByWallet(userId: string, walletId: string, status?: GoalStatus): Promise<Goal[]> {
     const query = status ? `?status=${status}` : '';
-    return request<Goal[]>(`/users/${userId}/wallets/${walletId}/goals${query}`);
+    const res = await request<Goal[]>(`/users/${userId}/wallets/${walletId}/goals${query}`);
+    return Array.isArray(res) ? res : [];
   },
 
   async createGoal(userId: string, walletId: string, goal: Partial<Goal>): Promise<Goal> {
@@ -318,7 +332,8 @@ export const api = {
     if (isDemoMode()) {
       return mockTransactionAnalyses.filter(a => a.transaction_id === transactionId);
     }
-    return request<TransactionAnalysis[]>(`/transactions/${transactionId}/analysis?page=${page}&page_size=${pageSize}`);
+    const res = await request<TransactionAnalysis[]>(`/transactions/${transactionId}/analysis?page=${page}&page_size=${pageSize}`);
+    return Array.isArray(res) ? res : [];
   },
 
   async getRecommendations(
@@ -329,7 +344,8 @@ export const api = {
     if (isDemoMode()) {
       return mockRecommendations.filter(r => r.wallet_id === walletId);
     }
-    return request<WalletRecommendation[]>(`/wallets/${walletId}/recommendations?page=${page}&page_size=${pageSize}`);
+    const res = await request<WalletRecommendation[]>(`/wallets/${walletId}/recommendations?page=${page}&page_size=${pageSize}`);
+    return Array.isArray(res) ? res : [];
   }
 };
 
