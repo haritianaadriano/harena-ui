@@ -11,6 +11,7 @@ import {
   CheckCircle2, XCircle, Clock, Info, ShieldCheck, 
   HelpCircle, ChevronRight, CornerDownRight, ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
+import * as Icons from 'lucide-react';
 
 interface TransactionsViewProps {
   currentUser: User;
@@ -47,6 +48,63 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
   const [txWalletId, setTxWalletId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+
+  // Category Modal & Form States
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatIcon, setNewCatIcon] = useState('Tag');
+  const [newCatColor, setNewCatColor] = useState('#3B82F6');
+  const [catFormLoading, setCatFormLoading] = useState(false);
+  const [catFormError, setCatFormError] = useState<string | null>(null);
+
+  // Helper component to render any dynamic Lucide icon safely
+  const CategoryIcon = ({ iconName, className = "h-4 w-4" }: { iconName: string; className?: string }) => {
+    const IconComponent = (Icons as any)[iconName] || Icons.HelpCircle;
+    return <IconComponent className={className} />;
+  };
+
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatName.trim()) {
+      setCatFormError('Le nom de la catégorie est obligatoire.');
+      return;
+    }
+    try {
+      setCatFormLoading(true);
+      setCatFormError(null);
+      await api.createCategory(currentUser.id, [{
+        name: newCatName.trim(),
+        icon: newCatIcon,
+        color: newCatColor,
+      }]);
+      // Reload categories list
+      const categoriesData = await api.getCategories(currentUser.id);
+      setCategories(categoriesData);
+      setNewCatName('');
+    } catch (err: any) {
+      setCatFormError(err.message || 'Impossible de créer la catégorie.');
+    } finally {
+      setCatFormLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = async (catId: string) => {
+    try {
+      setCatFormLoading(true);
+      setCatFormError(null);
+      await api.deleteCategory(currentUser.id, catId);
+      const categoriesData = await api.getCategories(currentUser.id);
+      setCategories(categoriesData);
+      // Adjust selected category id in transaction form if deleted category was currently selected
+      if (txCategoryId === catId && categoriesData.length > 0) {
+        setTxCategoryId(categoriesData[0].id);
+      }
+    } catch (err: any) {
+      setCatFormError(err.message || 'Impossible de supprimer cette catégorie.');
+    } finally {
+      setCatFormLoading(false);
+    }
+  };
 
   // Load basic configurations
   useEffect(() => {
@@ -235,16 +293,29 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
           <h1 className="text-2xl font-bold text-white tracking-tight">Registre des transactions</h1>
           <p className="text-sm text-slate-400">Visualisez, filtrez vos dépenses et analysez-les intelligemment.</p>
         </div>
-        <button
-          onClick={() => {
-            setTxWalletId(selectedWallet?.id || wallets[0]?.id || '');
-            setShowAddModal(true);
-          }}
-          className="bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-500/25 transition-all border border-cyan-500/30 self-start md:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Nouvelle transaction</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <button
+            onClick={() => {
+              setCatFormError(null);
+              setNewCatName('');
+              setShowCategoryModal(true);
+            }}
+            className="border border-slate-800 hover:bg-[#131c35] text-slate-300 font-semibold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer transition-all hover:text-white"
+          >
+            <Icons.Tag className="h-4 w-4 text-slate-400" />
+            <span>Gérer les catégories</span>
+          </button>
+          <button
+            onClick={() => {
+              setTxWalletId(selectedWallet?.id || wallets[0]?.id || '');
+              setShowAddModal(true);
+            }}
+            className="bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-500/25 transition-all border border-cyan-500/30"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nouvelle transaction</span>
+          </button>
+        </div>
       </div>
 
       {/* Selector & Filter Box */}
@@ -365,7 +436,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                         className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0"
                         style={{ backgroundColor: `${tx.category.color}15`, color: tx.category.color }}
                       >
-                        {isExpense ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                        <CategoryIcon iconName={tx.category.icon} className="h-4 w-4" />
                       </div>
                       <div>
                         <h4 className="font-semibold text-slate-200 text-sm group-hover:text-white transition-colors">{tx.description}</h4>
@@ -430,8 +501,9 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                   </div>
                   <div>
                     <span className="text-slate-400 block">Catégorie</span>
-                    <span className="font-semibold" style={{ color: selectedTx.category.color }}>
-                      {selectedTx.category.name}
+                    <span className="font-semibold flex items-center gap-1.5" style={{ color: selectedTx.category.color }}>
+                      <CategoryIcon iconName={selectedTx.category.icon} className="h-3.5 w-3.5" />
+                      <span>{selectedTx.category.name}</span>
                     </span>
                   </div>
                   <div>
@@ -695,6 +767,158 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Management Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs font-sans">
+          <div className="bg-[#0b1329] border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-slate-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Icons.Tag className="h-5 w-5 text-cyan-400" />
+                <h3 className="text-base font-bold text-white">Gérer les catégories</h3>
+              </div>
+              <button
+                onClick={() => setShowCategoryModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800/50 transition-colors"
+              >
+                <Icons.X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto space-y-6 md:space-y-0 md:grid md:grid-cols-2 md:gap-6 max-h-[70vh]">
+              
+              {/* Left Side: Current Categories list */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Catégories existantes</h4>
+                
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {categories.map((c) => (
+                    <div 
+                      key={c.id} 
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-[#131c35]/30 border border-slate-800/60"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div 
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold"
+                          style={{ backgroundColor: `${c.color}20`, color: c.color }}
+                        >
+                          <CategoryIcon iconName={c.icon} className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm font-semibold text-slate-200">{c.name}</span>
+                      </div>
+
+                      {c.is_system ? (
+                        <span className="text-[9px] bg-slate-800 text-slate-400 font-bold px-2 py-0.5 rounded-md uppercase">
+                          Système
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleDeleteCategory(c.id)}
+                          disabled={catFormLoading}
+                          className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          title="Supprimer la catégorie"
+                        >
+                          <Icons.Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Side: Create new category */}
+              <div className="space-y-3 border-t md:border-t-0 md:border-l border-slate-800 pt-6 md:pt-0 md:pl-6">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-sans">Nouvelle catégorie</h4>
+                
+                <form onSubmit={handleCreateCategory} className="space-y-4">
+                  {catFormError && (
+                    <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-center gap-1.5">
+                      <Icons.AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>{catFormError}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Nom</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Loisirs, Café, Cadeaux..."
+                      className="px-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white placeholder-slate-500"
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Couleur</label>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[
+                        '#10B981', '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6', 
+                        '#EC4899', '#F43F5E', '#F97316', '#F59E0B', '#64748B'
+                      ].map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setNewCatColor(color)}
+                          className="h-7 rounded-lg relative cursor-pointer border border-transparent hover:scale-105 transition-transform"
+                          style={{ backgroundColor: color }}
+                        >
+                          {newCatColor === color && (
+                            <span className="absolute inset-0 flex items-center justify-center text-white">
+                              <Icons.Check className="h-4 w-4 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Icône</label>
+                    <div className="grid grid-cols-7 gap-1.5 max-h-24 overflow-y-auto p-1 border border-slate-800 bg-[#131c35]/30 rounded-xl">
+                      {[
+                        'Tag', 'ShoppingBag', 'Coffee', 'Car', 'Utensils', 'Gift', 'Heart', 
+                        'Sparkles', 'Trophy', 'Plane', 'Laptop', 'Briefcase', 'Home', 'DollarSign',
+                        'Flame', 'BookOpen', 'User', 'Wallet', 'Compass', 'Tv', 'Gamepad'
+                      ].map((iconName) => (
+                        <button
+                          key={iconName}
+                          type="button"
+                          onClick={() => setNewCatIcon(iconName)}
+                          className={`h-7 flex items-center justify-center rounded-lg border text-slate-400 hover:text-white transition-all cursor-pointer ${
+                            newCatIcon === iconName 
+                              ? 'border-cyan-500 bg-[#131c35] text-cyan-400' 
+                              : 'border-transparent bg-transparent hover:bg-slate-800/30'
+                          }`}
+                        >
+                          <CategoryIcon iconName={iconName} className="h-4 w-4" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={catFormLoading}
+                    className="w-full bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-extrabold py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-md disabled:opacity-50"
+                  >
+                    {catFormLoading ? (
+                      <span className="inline-block h-3.5 w-3.5 border-2 border-[#020617] border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      'Créer la catégorie'
+                    )}
+                  </button>
+                </form>
+              </div>
+
+            </div>
+
           </div>
         </div>
       )}
