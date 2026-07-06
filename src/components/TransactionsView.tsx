@@ -44,6 +44,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
   const [txCategoryId, setTxCategoryId] = useState('');
   const [txReference, setTxReference] = useState('');
   const [txSource, setTxSource] = useState('');
+  const [txWalletId, setTxWalletId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
@@ -153,7 +154,8 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
     }
 
     try {
-      const newTx = await api.createTransaction(currentUser.id, selectedWallet.id, {
+      const targetWalletId = txWalletId || selectedWallet.id;
+      const newTx = await api.createTransaction(currentUser.id, targetWalletId, {
         amount: amountNum,
         type: txType,
         status: txStatus,
@@ -172,7 +174,12 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
       setShowAddModal(false);
 
       // Reload list and set as selected to see its AI analysis immediately!
-      loadTransactions();
+      const targetWalletObj = wallets.find(w => w.id === targetWalletId);
+      if (targetWalletObj && selectedWallet?.id !== targetWalletId) {
+        setSelectedWallet(targetWalletObj);
+      } else {
+        loadTransactions();
+      }
       setSelectedTx(newTx);
     } catch (err: any) {
       setFormError(err.message || 'Impossible d\'ajouter la transaction.');
@@ -229,7 +236,10 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
           <p className="text-sm text-slate-400">Visualisez, filtrez vos dépenses et analysez-les intelligemment.</p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setTxWalletId(selectedWallet?.id || wallets[0]?.id || '');
+            setShowAddModal(true);
+          }}
           className="bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-500/25 transition-all border border-cyan-500/30 self-start md:self-auto"
         >
           <Plus className="h-4 w-4" />
@@ -556,6 +566,21 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
 
             <form onSubmit={handleCreateTransaction} className="space-y-4">
               
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Portefeuille (Compte)</label>
+                <select
+                  className="px-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-slate-200"
+                  value={txWalletId}
+                  onChange={(e) => setTxWalletId(e.target.value)}
+                >
+                  {wallets.map((w) => (
+                    <option key={w.id} value={w.id} className="bg-[#0b1329] text-white">
+                      {w.name} ({w.currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">Montant</label>
