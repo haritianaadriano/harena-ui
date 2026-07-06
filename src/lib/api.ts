@@ -198,7 +198,10 @@ export const api = {
   async createWallet(userId: string, wallet: Partial<Wallet>): Promise<Wallet> {
     return request<Wallet>(`/users/${userId}/wallets`, {
       method: 'PUT',
-      body: JSON.stringify(wallet),
+      body: JSON.stringify({
+        ...wallet,
+        user_id: userId,
+      }),
     });
   },
 
@@ -253,7 +256,10 @@ export const api = {
   ): Promise<WalletTransaction> {
     return request<WalletTransaction>(`/users/${userId}/wallets/${walletId}/transactions`, {
       method: 'PUT',
-      body: JSON.stringify(transaction),
+      body: JSON.stringify({
+        ...transaction,
+        wallet: { id: walletId },
+      }),
     });
   },
 
@@ -338,7 +344,10 @@ export const api = {
   async createGoal(userId: string, walletId: string, goal: Partial<Goal>): Promise<Goal> {
     return request<Goal>(`/users/${userId}/wallets/${walletId}/goals`, {
       method: 'PUT',
-      body: JSON.stringify(goal),
+      body: JSON.stringify({
+        ...goal,
+        wallet: { id: walletId },
+      }),
     });
   },
 
