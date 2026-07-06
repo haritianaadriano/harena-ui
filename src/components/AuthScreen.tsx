@@ -129,7 +129,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                     type="text"
                     required
                     className="pl-9 pr-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35] text-white placeholder-slate-500"
-                    placeholder="Adriano"
+                    placeholder="John"
                     value={firstname}
                     onChange={(e) => setFirstname(e.target.value)}
                   />
@@ -141,7 +141,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                   type="text"
                   required
                   className="px-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35] text-white placeholder-slate-500"
-                  placeholder="Hei"
+                  placeholder="Doe"
                   value={lastname}
                   onChange={(e) => setLastname(e.target.value)}
                 />
@@ -157,7 +157,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                   type="text"
                   required
                   className="px-3 py-2 w-full border border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35] text-white placeholder-slate-500"
-                  placeholder="adriano123"
+                  placeholder="johndoe"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />

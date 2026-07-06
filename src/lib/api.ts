@@ -355,10 +355,10 @@ export const api = {
 
 const mockUser: User = {
   id: 'usr-demo-123',
-  firstname: 'Adriano',
-  lastname: 'Hei',
-  username: 'adriano123',
-  email: 'hei.adriano.4@gmail.com',
+  firstname: 'John',
+  lastname: 'Doe',
+  username: 'johndoe',
+  email: 'john.doe@example.com',
   registered_datetime: '2026-01-14T10:00:00Z',
   sex: 'M',
 };
