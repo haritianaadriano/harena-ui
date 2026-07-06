@@ -173,6 +173,22 @@ export const api = {
     return request<User>('/auth/whoami');
   },
 
+  async getUserById(id: string): Promise<User> {
+    if (isDemoMode()) {
+      return mockUser;
+    }
+    return request<User>(`/users/${id}`);
+  },
+
+  async refreshToken(): Promise<{ access_token: string; token_type: string; access_expires_in: number }> {
+    if (isDemoMode()) {
+      return { access_token: 'demo-token-12345', token_type: 'Bearer', access_expires_in: 900 };
+    }
+    return request<any>('/auth/refresh', {
+      method: 'POST',
+    });
+  },
+
   // Wallets
   async getWallets(userId: string): Promise<Wallet[]> {
     const res = await request<Wallet[]>(`/users/${userId}/wallets`);
@@ -297,6 +313,15 @@ export const api = {
     });
   },
 
+  async getBudgetById(userId: string, budgetId: string): Promise<Budget> {
+    if (isDemoMode()) {
+      const budget = demoBudgets.find(b => b.id === budgetId);
+      if (!budget) throw new Error('Budget introuvable');
+      return budget;
+    }
+    return request<Budget>(`/users/${userId}/budgets/${budgetId}`);
+  },
+
   // Goals
   async getGoals(userId: string, status?: GoalStatus): Promise<Goal[]> {
     const query = status ? `?status=${status}` : '';
@@ -321,6 +346,15 @@ export const api = {
     return request<Goal>(`/users/${userId}/goals/${goalId}`, {
       method: 'DELETE',
     });
+  },
+
+  async getGoalById(userId: string, goalId: string): Promise<Goal> {
+    if (isDemoMode()) {
+      const goal = demoGoals.find(g => g.id === goalId);
+      if (!goal) throw new Error('Objectif introuvable');
+      return goal;
+    }
+    return request<Goal>(`/users/${userId}/goals/${goalId}`);
   },
 
   // AI Insights
@@ -634,6 +668,14 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
   if (path === '/auth/whoami') {
     return mockUser as unknown as T;
   }
+  // POST /auth/refresh
+  if (path === '/auth/refresh') {
+    return { access_token: 'demo-token-12345', token_type: 'Bearer', access_expires_in: 900 } as unknown as T;
+  }
+  // GET /users/{id}
+  if (parts[0] === 'users' && parts.length === 2) {
+    return mockUser as unknown as T;
+  }
 
   // GET /users/{user_id}/wallets
   if (parts[0] === 'users' && parts[2] === 'wallets' && parts.length === 3) {
@@ -829,11 +871,16 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
     return demoBudgets as unknown as T;
   }
 
-  // DELETE /users/{user_id}/budgets/{budget_id}
+  // GET or DELETE /users/{user_id}/budgets/{budget_id}
   if (parts[0] === 'users' && parts[2] === 'budgets' && parts.length === 4) {
     const bId = parts[3];
+    if (options.method === 'DELETE') {
+      const budget = demoBudgets.find(b => b.id === bId);
+      demoBudgets = demoBudgets.filter(b => b.id !== bId);
+      return budget as unknown as T;
+    }
     const budget = demoBudgets.find(b => b.id === bId);
-    demoBudgets = demoBudgets.filter(b => b.id !== bId);
+    if (!budget) throw new Error('Budget introuvable');
     return budget as unknown as T;
   }
 
@@ -870,11 +917,16 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
     return demoGoals.filter(g => g.wallet.id === walletId) as unknown as T;
   }
 
-  // DELETE /users/{user_id}/goals/{goal_id}
+  // GET or DELETE /users/{user_id}/goals/{goal_id}
   if (parts[0] === 'users' && parts[2] === 'goals' && parts.length === 4) {
     const gId = parts[3];
+    if (options.method === 'DELETE') {
+      const goal = demoGoals.find(g => g.id === gId);
+      demoGoals = demoGoals.filter(g => g.id !== gId);
+      return goal as unknown as T;
+    }
     const goal = demoGoals.find(g => g.id === gId);
-    demoGoals = demoGoals.filter(g => g.id !== gId);
+    if (!goal) throw new Error('Objectif introuvable');
     return goal as unknown as T;
   }
 
