@@ -56,6 +56,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
   const [newCatColor, setNewCatColor] = useState('#3B82F6');
   const [catFormLoading, setCatFormLoading] = useState(false);
   const [catFormError, setCatFormError] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<TransactionCategory | null>(null);
 
   // Helper component to render any dynamic Lucide icon safely
   const CategoryIcon = ({ iconName, className = "h-4 w-4" }: { iconName: string; className?: string }) => {
@@ -73,19 +74,44 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
       setCatFormLoading(true);
       setCatFormError(null);
       await api.createCategory(currentUser.id, [{
+        id: editingCategory ? editingCategory.id : (null as any),
+        user_id: currentUser.id,
         name: newCatName.trim(),
         icon: newCatIcon,
         color: newCatColor,
+        is_system: editingCategory ? editingCategory.is_system : false,
+        creation_datetime: editingCategory ? editingCategory.creation_datetime : new Date().toISOString(),
       }]);
       // Reload categories list
       const categoriesData = await api.getCategories(currentUser.id);
       setCategories(categoriesData);
+      
+      // Reset form states
       setNewCatName('');
+      setEditingCategory(null);
+      setNewCatIcon('Tag');
+      setNewCatColor('#3B82F6');
     } catch (err: any) {
-      setCatFormError(err.message || 'Impossible de créer la catégorie.');
+      setCatFormError(err.message || 'Impossible de sauvegarder la catégorie.');
     } finally {
       setCatFormLoading(false);
     }
+  };
+
+  const startEditCategory = (cat: TransactionCategory) => {
+    setEditingCategory(cat);
+    setNewCatName(cat.name);
+    setNewCatIcon(cat.icon);
+    setNewCatColor(cat.color);
+    setCatFormError(null);
+  };
+
+  const cancelEditCategory = () => {
+    setEditingCategory(null);
+    setNewCatName('');
+    setNewCatIcon('Tag');
+    setNewCatColor('#3B82F6');
+    setCatFormError(null);
   };
 
   const handleDeleteCategory = async (catId: string) => {
@@ -213,12 +239,14 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
 
     try {
       const targetWalletId = txWalletId || selectedWallet.id;
+      const targetWalletObj = wallets.find(w => w.id === targetWalletId) || selectedWallet;
       const newTx = await api.createTransaction(currentUser.id, targetWalletId, {
         amount: amountNum,
         type: txType,
         status: txStatus,
         description: txDescription,
         category: matchedCategory,
+        wallet: targetWalletObj,
         reference: txReference || undefined,
         source: txSource || undefined,
         transaction_datetime: new Date().toISOString(),
@@ -232,7 +260,6 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
       setShowAddModal(false);
 
       // Reload list and set as selected to see its AI analysis immediately!
-      const targetWalletObj = wallets.find(w => w.id === targetWalletId);
       if (targetWalletObj && selectedWallet?.id !== targetWalletId) {
         setSelectedWallet(targetWalletObj);
       } else {
@@ -298,6 +325,9 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
             onClick={() => {
               setCatFormError(null);
               setNewCatName('');
+              setEditingCategory(null);
+              setNewCatIcon('Tag');
+              setNewCatColor('#3B82F6');
               setShowCategoryModal(true);
             }}
             className="border border-slate-800 hover:bg-[#131c35] text-slate-300 font-semibold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer transition-all hover:text-white"
@@ -801,7 +831,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                   {categories.map((c) => (
                     <div 
                       key={c.id} 
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-[#131c35]/30 border border-slate-800/60"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-[#131c35]/30 border border-slate-800/60 animate-fade-in"
                     >
                       <div className="flex items-center gap-2.5">
                         <div 
@@ -818,23 +848,37 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                           Système
                         </span>
                       ) : (
-                        <button
-                          onClick={() => handleDeleteCategory(c.id)}
-                          disabled={catFormLoading}
-                          className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer"
-                          title="Supprimer la catégorie"
-                        >
-                          <Icons.Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => startEditCategory(c)}
+                            disabled={catFormLoading}
+                            className="text-slate-500 hover:text-cyan-400 p-1.5 rounded-lg hover:bg-cyan-500/10 transition-colors cursor-pointer"
+                            title="Modifier la catégorie"
+                            type="button"
+                          >
+                            <Icons.Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(c.id)}
+                            disabled={catFormLoading}
+                            className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title="Supprimer la catégorie"
+                            type="button"
+                          >
+                            <Icons.Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Right Side: Create new category */}
+              {/* Right Side: Create or edit category */}
               <div className="space-y-3 border-t md:border-t-0 md:border-l border-slate-800 pt-6 md:pt-0 md:pl-6">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-sans">Nouvelle catégorie</h4>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-sans">
+                  {editingCategory ? 'Modifier la catégorie' : 'Nouvelle catégorie'}
+                </h4>
                 
                 <form onSubmit={handleCreateCategory} className="space-y-4">
                   {catFormError && (
@@ -903,17 +947,28 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={catFormLoading}
-                    className="w-full bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-extrabold py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-md disabled:opacity-50"
-                  >
-                    {catFormLoading ? (
-                      <span className="inline-block h-3.5 w-3.5 border-2 border-[#020617] border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      'Créer la catégorie'
+                  <div className="flex gap-2">
+                    {editingCategory && (
+                      <button
+                        type="button"
+                        onClick={cancelEditCategory}
+                        className="flex-1 border border-slate-800 hover:bg-[#131c35] text-slate-300 font-semibold py-2.5 px-4 rounded-xl text-xs transition-colors cursor-pointer"
+                      >
+                        Annuler
+                      </button>
                     )}
-                  </button>
+                    <button
+                      type="submit"
+                      disabled={catFormLoading}
+                      className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-extrabold py-2.5 px-4 rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-md disabled:opacity-50"
+                    >
+                      {catFormLoading ? (
+                        <span className="inline-block h-3.5 w-3.5 border-2 border-[#020617] border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        editingCategory ? 'Enregistrer' : 'Créer la catégorie'
+                      )}
+                    </button>
+                  </div>
                 </form>
               </div>
 

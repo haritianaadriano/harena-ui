@@ -869,17 +869,30 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
       const created: TransactionCategory[] = [];
       const items = Array.isArray(body) ? body : [body];
       for (const item of items) {
-        const newCat: TransactionCategory = {
-          id: `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          user_id: parts[1],
-          name: item.name || 'Nouvelle Catégorie',
-          icon: item.icon || 'HelpCircle',
-          color: item.color || '#3B82F6',
-          is_system: false,
-          creation_datetime: new Date().toISOString()
-        };
-        demoCategories.push(newCat);
-        created.push(newCat);
+        if (item.id) {
+          const idx = demoCategories.findIndex(c => c.id === item.id);
+          if (idx >= 0) {
+            demoCategories[idx] = {
+              ...demoCategories[idx],
+              name: item.name || demoCategories[idx].name,
+              icon: item.icon || demoCategories[idx].icon,
+              color: item.color || demoCategories[idx].color,
+            };
+            created.push(demoCategories[idx]);
+          }
+        } else {
+          const newCat: TransactionCategory = {
+            id: `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            user_id: parts[1],
+            name: item.name || 'Nouvelle Catégorie',
+            icon: item.icon || 'HelpCircle',
+            color: item.color || '#3B82F6',
+            is_system: false,
+            creation_datetime: new Date().toISOString()
+          };
+          demoCategories.push(newCat);
+          created.push(newCat);
+        }
       }
       return created as unknown as T;
     }
