@@ -84,6 +84,9 @@ export function logout() {
   localStorage.removeItem(DEMO_MODE_KEY);
 }
 
+// Global promise to deduplicate concurrent token refreshes
+let refreshTokenPromise: Promise<any> | null = null;
+
 // Custom request wrapper to handle Authorization, CORS, and Demo Fallbacks
 async function request<T>(
   path: string,
@@ -106,9 +109,59 @@ async function request<T>(
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
+    credentials: 'include', // Support cross-origin secure HttpOnly cookies for refresh tokens
   });
 
   if (!response.ok) {
+    // If we receive a 401 (Unauthorized) or 403 (Forbidden) and we are not already trying to refresh the token,
+    // let's try to automatically call `/auth/refresh` to get a new access token and retry.
+    if ((response.status === 401 || response.status === 403) && path !== '/auth/refresh') {
+      try {
+        if (!refreshTokenPromise) {
+          refreshTokenPromise = api.refreshToken()
+            .then(res => {
+              if (res && res.access_token) {
+                setToken(res.access_token);
+              }
+              return res;
+            })
+            .finally(() => {
+              refreshTokenPromise = null;
+            });
+        }
+
+        const refreshRes = await refreshTokenPromise;
+        if (refreshRes && refreshRes.access_token) {
+          // Retry the original request with the newly acquired token
+          const retryHeaders = new Headers(options.headers || {});
+          retryHeaders.set('Authorization', `Bearer ${refreshRes.access_token}`);
+          if (!retryHeaders.has('Content-Type') && !(options.body instanceof FormData)) {
+            retryHeaders.set('Content-Type', 'application/json');
+          }
+
+          const retryResponse = await fetch(`${API_BASE_URL}${path}`, {
+            ...options,
+            headers: retryHeaders,
+            credentials: 'include',
+          });
+
+          if (retryResponse.ok) {
+            if (retryResponse.status === 204) {
+              return {} as T;
+            }
+            return retryResponse.json() as Promise<T>;
+          }
+        }
+      } catch (refreshErr) {
+        // If refreshing the token fails, logout to clear state and refresh page
+        logout();
+        if (typeof window !== 'undefined') {
+          window.location.reload();
+        }
+        throw refreshErr;
+      }
+    }
+
     let errorMessage = 'Une erreur est survenue';
     try {
       const errBody = await response.json();
