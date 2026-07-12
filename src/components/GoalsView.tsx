@@ -92,12 +92,14 @@ export default function GoalsView({ currentUser }: GoalsViewProps) {
     }
 
     try {
+      const matchedWallet = wallets.find(w => w.id === selectedWalletId);
       await api.createGoal(currentUser.id, selectedWalletId, {
         name: goalName,
         target_amount: targetNum,
         current_amount: currentNum,
         deadline,
         status: currentNum >= targetNum ? 'COMPLETED' : 'IN_PROGRESS',
+        wallet: matchedWallet,
       });
 
       setGoalName('');

@@ -181,6 +181,16 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
     loadTransactions();
   }, [selectedWallet, filterType, filterStatus, fromDate, toDate, currentUser.id]);
 
+  // Safety hook to auto-select the first category if txCategoryId is empty/invalid
+  useEffect(() => {
+    if (categories.length > 0) {
+      const isValid = categories.some(c => c.id === txCategoryId);
+      if (!isValid) {
+        setTxCategoryId(categories[0].id);
+      }
+    }
+  }, [categories, txCategoryId]);
+
   // Load AI analysis when a transaction is selected
   useEffect(() => {
     async function loadAnalysis() {
@@ -338,6 +348,9 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
           <button
             onClick={() => {
               setTxWalletId(selectedWallet?.id || wallets[0]?.id || '');
+              if (categories.length > 0) {
+                setTxCategoryId(categories[0].id);
+              }
               setShowAddModal(true);
             }}
             className="bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-500/25 transition-all border border-cyan-500/30"

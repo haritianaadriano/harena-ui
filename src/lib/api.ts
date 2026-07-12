@@ -252,8 +252,13 @@ export const api = {
     return request<Wallet>(`/users/${userId}/wallets`, {
       method: 'PUT',
       body: JSON.stringify({
-        ...wallet,
+        id: wallet.id || null,
         user_id: userId,
+        name: wallet.name,
+        currency: wallet.currency,
+        type: wallet.type,
+        creation_datetime: wallet.creation_datetime || new Date().toISOString(),
+        updated_datetime: wallet.updated_datetime || new Date().toISOString(),
       }),
     });
   },
@@ -310,8 +315,18 @@ export const api = {
     return request<WalletTransaction>(`/users/${userId}/wallets/${walletId}/transactions`, {
       method: 'PUT',
       body: JSON.stringify({
-        ...transaction,
-        wallet: { id: walletId },
+        id: transaction.id || null,
+        wallet: transaction.wallet || { id: walletId },
+        category: transaction.category,
+        amount: Number(transaction.amount) || 0,
+        type: transaction.type || 'EXPENSE',
+        status: transaction.status || 'COMPLETED',
+        description: transaction.description || '',
+        reference: transaction.reference || '',
+        source: transaction.source || '',
+        transaction_datetime: transaction.transaction_datetime || new Date().toISOString(),
+        creation_datetime: transaction.creation_datetime || new Date().toISOString(),
+        updated_datetime: transaction.updated_datetime || new Date().toISOString(),
       }),
     });
   },
@@ -330,7 +345,15 @@ export const api = {
   async createCategory(userId: string, categories: Partial<TransactionCategory>[]): Promise<TransactionCategory[]> {
     return request<TransactionCategory[]>(`/users/${userId}/categories`, {
       method: 'PUT',
-      body: JSON.stringify(categories),
+      body: JSON.stringify(categories.map(c => ({
+        id: c.id || null,
+        user_id: c.user_id || userId,
+        name: c.name,
+        icon: c.icon,
+        color: c.color,
+        is_system: c.is_system ?? false,
+        creation_datetime: c.creation_datetime || new Date().toISOString(),
+      }))),
     });
   },
 
@@ -362,7 +385,18 @@ export const api = {
   async updateBudget(userId: string, budget: Partial<Budget>): Promise<Budget> {
     return request<Budget>(`/users/${userId}/budgets`, {
       method: 'PUT',
-      body: JSON.stringify(budget),
+      body: JSON.stringify({
+        id: budget.id || null,
+        wallet: budget.wallet,
+        category: budget.category,
+        limit_amount: Number(budget.limit_amount) || 0,
+        spent_amount: Number(budget.spent_amount) || 0,
+        is_reserved: budget.is_reserved ?? false,
+        period_type: budget.period_type || 'MONTHLY',
+        start_date: budget.start_date || new Date().toISOString().split('T')[0],
+        end_date: budget.end_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        creation_datetime: budget.creation_datetime || new Date().toISOString(),
+      }),
     });
   },
 
@@ -398,8 +432,14 @@ export const api = {
     return request<Goal>(`/users/${userId}/wallets/${walletId}/goals`, {
       method: 'PUT',
       body: JSON.stringify({
-        ...goal,
-        wallet: { id: walletId },
+        id: goal.id || null,
+        wallet: goal.wallet || { id: walletId },
+        name: goal.name || 'Objectif',
+        target_amount: Number(goal.target_amount) || 0,
+        current_amount: Number(goal.current_amount) || 0,
+        deadline: goal.deadline || new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        status: goal.status || 'IN_PROGRESS',
+        creation_datetime: goal.creation_datetime || new Date().toISOString(),
       }),
     });
   },
