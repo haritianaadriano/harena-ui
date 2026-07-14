@@ -183,7 +183,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
 
   // Safety hook to auto-select the first category if txCategoryId is empty/invalid
   useEffect(() => {
-    if (categories.length > 0) {
+    if (categories.length > 0 && txCategoryId !== '') {
       const isValid = categories.some(c => c.id === txCategoryId);
       if (!isValid) {
         setTxCategoryId(categories[0].id);
@@ -240,12 +240,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
       return;
     }
 
-    const matchedCategory = categories.find(c => c.id === txCategoryId);
-    if (!matchedCategory) {
-      setFormError('Veuillez sélectionner une catégorie valide.');
-      setFormLoading(false);
-      return;
-    }
+    const matchedCategory = categories.find(c => c.id === txCategoryId) || null;
 
     try {
       const targetWalletId = txWalletId || selectedWallet.id;
@@ -348,9 +343,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
           <button
             onClick={() => {
               setTxWalletId(selectedWallet?.id || wallets[0]?.id || '');
-              if (categories.length > 0) {
-                setTxCategoryId(categories[0].id);
-              }
+              setTxCategoryId('');
               setShowAddModal(true);
             }}
             className="bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-500/25 transition-all border border-cyan-500/30"
@@ -477,14 +470,19 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                     <div className="flex items-center gap-3">
                       <div
                         className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0"
-                        style={{ backgroundColor: `${tx.category.color}15`, color: tx.category.color }}
+                        style={{ 
+                          backgroundColor: tx.category ? `${tx.category.color}15` : '#94a3b815', 
+                          color: tx.category ? tx.category.color : '#94a3b8' 
+                        }}
                       >
-                        <CategoryIcon iconName={tx.category.icon} className="h-4 w-4" />
+                        <CategoryIcon iconName={tx.category ? tx.category.icon : 'Tag'} className="h-4 w-4" />
                       </div>
                       <div>
                         <h4 className="font-semibold text-slate-200 text-sm group-hover:text-white transition-colors">{tx.description}</h4>
                         <div className="flex items-center gap-2 text-xs text-slate-400">
-                          <span className="font-semibold" style={{ color: tx.category.color }}>{tx.category.name}</span>
+                          <span className="font-semibold" style={{ color: tx.category ? tx.category.color : '#94a3b8' }}>
+                            {tx.category ? tx.category.name : 'Sans catégorie'}
+                          </span>
                           <span>•</span>
                           <span className="font-mono">{new Date(tx.transaction_datetime).toLocaleDateString('fr-FR', {day: 'numeric', month: 'short'})}</span>
                         </div>
@@ -544,9 +542,9 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                   </div>
                   <div>
                     <span className="text-slate-400 block">Catégorie</span>
-                    <span className="font-semibold flex items-center gap-1.5" style={{ color: selectedTx.category.color }}>
-                      <CategoryIcon iconName={selectedTx.category.icon} className="h-3.5 w-3.5" />
-                      <span>{selectedTx.category.name}</span>
+                    <span className="font-semibold flex items-center gap-1.5" style={{ color: selectedTx.category ? selectedTx.category.color : '#94a3b8' }}>
+                      <CategoryIcon iconName={selectedTx.category ? selectedTx.category.icon : 'Tag'} className="h-3.5 w-3.5" />
+                      <span>{selectedTx.category ? selectedTx.category.name : 'Sans catégorie'}</span>
                     </span>
                   </div>
                   <div>
@@ -746,6 +744,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                     value={txCategoryId}
                     onChange={(e) => setTxCategoryId(e.target.value)}
                   >
+                    <option value="" className="bg-[#0b1329] text-slate-400">Aucune catégorie (Optionnel)</option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.id} className="bg-[#0b1329] text-white">{c.name}</option>
                     ))}

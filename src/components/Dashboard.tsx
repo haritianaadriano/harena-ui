@@ -361,7 +361,10 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
                     <div className="flex items-center gap-3">
                       <div 
                         className="h-10 w-10 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0"
-                        style={{ backgroundColor: `${tx.category.color}15`, color: tx.category.color }}
+                        style={{ 
+                          backgroundColor: tx.category ? `${tx.category.color}15` : '#94a3b815', 
+                          color: tx.category ? tx.category.color : '#94a3b8' 
+                        }}
                       >
                         {isExpense ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
                       </div>
@@ -370,8 +373,8 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
                           {tx.description}
                         </h4>
                         <div className="flex items-center gap-2 text-xs text-slate-400">
-                          <span className="font-semibold" style={{ color: tx.category.color }}>
-                            {tx.category.name}
+                          <span className="font-semibold" style={{ color: tx.category ? tx.category.color : '#94a3b8' }}>
+                            {tx.category ? tx.category.name : 'Sans catégorie'}
                           </span>
                           <span>•</span>
                           <span className="font-mono">{formattedDate}</span>

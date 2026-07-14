@@ -48,7 +48,7 @@ export interface TransactionCategory {
 export interface WalletTransaction {
   id: string;
   wallet: Wallet;
-  category: TransactionCategory;
+  category: TransactionCategory | null;
   amount: number;
   type: TransactionType;
   status: TransactionStatus;

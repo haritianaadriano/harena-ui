@@ -858,8 +858,10 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
 
     if (options.method === 'PUT') {
       const body = JSON.parse(options.body as string);
-      const categoryId = body.category?.id || demoCategories[0].id;
-      const category = demoCategories.find(c => c.id === categoryId) || demoCategories[0];
+      let category = null;
+      if (body.category && body.category.id) {
+        category = demoCategories.find(c => c.id === body.category.id) || null;
+      }
       const newTx: WalletTransaction = {
         id: `tx-${Date.now()}`,
         wallet,
@@ -877,9 +879,11 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
       demoTransactions.unshift(newTx); // Add to beginning
 
       // Dynamically update spent_amount in budget if matches category
-      const matchedBudget = demoBudgets.find(b => b.category.id === categoryId && b.wallet.id === walletId);
-      if (matchedBudget && newTx.type === 'EXPENSE') {
-        matchedBudget.spent_amount += newTx.amount;
+      if (category) {
+        const matchedBudget = demoBudgets.find(b => b.category.id === category.id && b.wallet.id === walletId);
+        if (matchedBudget && newTx.type === 'EXPENSE') {
+          matchedBudget.spent_amount += newTx.amount;
+        }
       }
 
       // Generate mock transaction analysis immediately for this transaction
@@ -888,7 +892,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
       const mockAnalysis: TransactionAnalysis = {
         id: `an-${Date.now()}`,
         transaction_id: newTx.id,
-        predicted_category: category.name,
+        predicted_category: category ? category.name : 'Sans catégorie',
         anomaly_score: Number(randomAnomaly.toFixed(2)),
         financial_health_score: Number(healthScore.toFixed(2)),
         sentiment: newTx.type === 'INCOME' ? 'HAPPY' : (newTx.amount > 100 ? 'CONCERNED' : 'NEUTRAL'),
