@@ -461,15 +461,16 @@ export const api = {
 
   // AI Insights
   async getTransactionAnalysis(
+    userId: string,
     transactionId: string,
     page: number = 1,
     pageSize: number = 10
-  ): Promise<TransactionAnalysis[]> {
+  ): Promise<TransactionAnalysis | TransactionAnalysis[] | null> {
     if (isDemoMode()) {
       return mockTransactionAnalyses.filter(a => a.transaction_id === transactionId);
     }
-    const res = await request<TransactionAnalysis[]>(`/transactions/${transactionId}/analysis?page=${page}&page_size=${pageSize}`);
-    return Array.isArray(res) ? res : [];
+    const res = await request<TransactionAnalysis | TransactionAnalysis[]>(`/users/${userId}/transactions/${transactionId}/analysis?page=${page}&page_size=${pageSize}`);
+    return res;
   },
 
   async getRecommendations(

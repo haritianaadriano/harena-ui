@@ -200,9 +200,13 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
       }
       try {
         setAnalysisLoading(true);
-        const analyses = await api.getTransactionAnalysis(selectedTx.id);
-        if (analyses.length > 0) {
-          setAnalysis(analyses[0]);
+        const res = await api.getTransactionAnalysis(currentUser.id, selectedTx.id);
+        if (res) {
+          if (Array.isArray(res)) {
+            setAnalysis(res[0] || null);
+          } else {
+            setAnalysis(res);
+          }
         } else {
           setAnalysis(null);
         }
@@ -214,7 +218,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
       }
     }
     loadAnalysis();
-  }, [selectedTx]);
+  }, [selectedTx, currentUser.id]);
 
   const handleCreateTransaction = async (e: React.FormEvent) => {
     e.preventDefault();

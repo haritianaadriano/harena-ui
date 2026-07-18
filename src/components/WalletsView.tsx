@@ -8,10 +8,10 @@ import { api, formatCurrency } from '../lib/api';
 import { User, Wallet, WalletBalanceSnapshot, WalletType } from '../types';
 import { 
   Plus, Calendar, CreditCard, Sparkles, AlertCircle, 
-  CheckCircle, ChevronRight, BarChart3, TrendingUp, Info
+  CheckCircle, ChevronRight, BarChart3, TrendingUp, Info, TrendingDown
 } from 'lucide-react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, 
+  AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer 
 } from 'recharts';
 
@@ -304,7 +304,13 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
                 ) : (
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorWalletBalance" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0}/>
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
                         <XAxis 
                           dataKey="date" 
@@ -318,6 +324,7 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
                           fontSize={10} 
                           tickLine={false} 
                           axisLine={false} 
+                          width={80}
                           tickFormatter={(val) => formatCurrency(val, selectedWallet.currency)} 
                         />
                         <Tooltip 
@@ -325,16 +332,103 @@ export default function WalletsView({ currentUser, selectedWallet, setSelectedWa
                           labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
                           formatter={(value) => [formatCurrency(Number(value), selectedWallet.currency), 'Solde']}
                         />
-                        <Line 
+                        <Area 
                           type="monotone" 
                           dataKey="solde" 
                           stroke="#06b6d4" 
                           strokeWidth={3} 
+                          fillOpacity={1}
+                          fill="url(#colorWalletBalance)"
                           dot={{ r: 4, strokeWidth: 2, fill: '#0b1329', stroke: '#22d3ee' }} 
                           activeDot={{ r: 6 }} 
                         />
-                      </LineChart>
+                      </AreaChart>
                     </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+
+              {/* Detailed Balance History List */}
+              <div className="bg-[#0b1329] p-6 rounded-3xl border border-slate-800/80 shadow-sm space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-sans">
+                    <Calendar className="h-4 w-4 text-cyan-400" />
+                    <span>Liste historique des soldes</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-sans">Détail chronologique des soldes enregistrés pour ce portefeuille.</p>
+                </div>
+
+                {historyLoading ? (
+                  <div className="flex flex-col items-center justify-center py-8 space-y-2">
+                    <span className="h-6 w-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-slate-400 font-sans">Chargement de la liste...</span>
+                  </div>
+                ) : !history || history.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-slate-500 font-sans bg-[#131c35]/15 rounded-2xl border border-dashed border-slate-800">
+                    Aucun historique de solde enregistré.
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-slate-800/80 bg-[#131c35]/15">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800/80 bg-[#131c35]/40 text-slate-400">
+                            <th className="p-3 font-semibold font-sans">Date & Heure</th>
+                            <th className="p-3 font-semibold text-right font-sans">Solde</th>
+                            <th className="p-3 font-semibold text-right font-sans">Variation</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60">
+                          {(() => {
+                            const sortedHistory = [...history].sort((a, b) => 
+                              new Date(b.snapshot_datetime).getTime() - new Date(a.snapshot_datetime).getTime()
+                            );
+
+                            return sortedHistory.map((h, i) => {
+                              const prev = sortedHistory[i + 1];
+                              const diff = prev ? h.balance - prev.balance : 0;
+                              const percent = prev && prev.balance !== 0 ? (diff / prev.balance) * 100 : 0;
+
+                              const formattedDate = new Date(h.snapshot_datetime).toLocaleDateString('fr-FR', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              });
+
+                              return (
+                                <tr key={h.id || i} className="hover:bg-slate-800/10 transition-colors">
+                                  <td className="p-3 text-slate-300 font-medium font-sans">
+                                    {formattedDate}
+                                  </td>
+                                  <td className="p-3 text-right font-semibold text-slate-100 font-mono">
+                                    {formatCurrency(h.balance, selectedWallet.currency)}
+                                  </td>
+                                  <td className="p-3 text-right font-mono">
+                                    {!prev ? (
+                                      <span className="text-slate-500 text-[10px]">—</span>
+                                    ) : diff > 0 ? (
+                                      <span className="text-emerald-400 text-xs font-semibold inline-flex items-center gap-0.5 justify-end w-full">
+                                        <TrendingUp className="h-3.5 w-3.5" />
+                                        +{formatCurrency(diff, selectedWallet.currency)} (+{percent.toFixed(1)}%)
+                                      </span>
+                                    ) : diff < 0 ? (
+                                      <span className="text-rose-400 text-xs font-semibold inline-flex items-center gap-0.5 justify-end w-full">
+                                        <TrendingDown className="h-3.5 w-3.5" />
+                                        {formatCurrency(diff, selectedWallet.currency)} ({percent.toFixed(1)}%)
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400 text-xs">Stable</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>

@@ -9,8 +9,13 @@ import { User, Wallet, WalletTransaction, WalletRecommendation, Budget, Goal } f
 import { 
   Sparkles, Wallet as WalletIcon, TrendingUp, TrendingDown, 
   AlertTriangle, CheckCircle, ChevronRight, PieChart, 
-  ShieldAlert, Activity, ArrowUpRight, ArrowDownLeft
+  ShieldAlert, Activity, ArrowUpRight, ArrowDownLeft,
+  BarChart3, Info, Calendar
 } from 'lucide-react';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer 
+} from 'recharts';
 
 interface DashboardProps {
   currentUser: User;
@@ -26,7 +31,10 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
   const [recommendations, setRecommendations] = useState<WalletRecommendation[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [globalHistory, setGlobalHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [chartMode, setChartMode] = useState<string>('all'); // 'all' or specific wallet ID
   const [activeRecIndex, setActiveRecIndex] = useState(0);
 
   useEffect(() => {
@@ -71,8 +79,66 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
         const goalsData = await api.getGoals(currentUser.id);
         setGoals(goalsData);
 
+        // Fetch balance history for all wallets to calculate aggregate trend
+        setHistoryLoading(true);
+        const historyPromises = walletsData.map(async (w) => {
+          try {
+            const toDate = new Date().toISOString();
+            const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+            const historyData = await api.getBalanceHistory(currentUser.id, w.id, fromDate, toDate);
+            return { walletId: w.id, walletName: w.name, currency: w.currency, history: historyData };
+          } catch (_) {
+            return { walletId: w.id, walletName: w.name, currency: w.currency, history: [] };
+          }
+        });
+        const resolvedHistories = await Promise.all(historyPromises);
+
+        // Group by snapshot date
+        const dateMap: { [date: string]: { [walletId: string]: number } } = {};
+        const datesSet = new Set<string>();
+
+        resolvedHistories.forEach(wHist => {
+          if (Array.isArray(wHist.history)) {
+            wHist.history.forEach((snap: any) => {
+              const dStr = snap.snapshot_datetime ? snap.snapshot_datetime.split('T')[0] : '';
+              if (dStr) {
+                datesSet.add(dStr);
+                if (!dateMap[dStr]) dateMap[dStr] = {};
+                dateMap[dStr][wHist.walletId] = snap.balance;
+              }
+            });
+          }
+        });
+
+        const sortedDates = Array.from(datesSet).sort();
+
+        // Create aggregate data
+        const aggregated = sortedDates.map(d => {
+          let totalMGA = 0;
+          const details: { [walletId: string]: number } = {};
+
+          resolvedHistories.forEach(wHist => {
+            const bal = dateMap[d][wHist.walletId] ?? 0;
+            details[wHist.walletId] = bal;
+
+            const rate = wHist.currency === 'EUR' ? 5000 : wHist.currency === 'USD' ? 4600 : 1;
+            totalMGA += bal * rate;
+          });
+
+          return {
+            dateStr: d,
+            date: new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
+            totalMGA,
+            ...details
+          };
+        });
+
+        setGlobalHistory(aggregated);
+        setHistoryLoading(false);
+
       } catch (err) {
         console.error('Error loading dashboard data', err);
+        setHistoryLoading(false);
       } finally {
         setLoading(false);
       }
@@ -310,6 +376,107 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
           </div>
         </div>
 
+      </div>
+
+      {/* Visual Balance History Chart */}
+      <div className="bg-[#0b1329] p-6 rounded-3xl border border-slate-800/80 shadow-sm space-y-4 hover:border-slate-700/80 transition-all duration-300">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <BarChart3 className="h-4 w-4 text-cyan-400" />
+              <span>Évolution des soldes</span>
+            </h3>
+            <p className="text-xs text-slate-400">Visualisez la tendance de vos avoirs et l'évolution globale de votre patrimoine.</p>
+          </div>
+          
+          {/* Chart filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 shrink-0 font-medium hidden sm:inline">Portefeuille :</span>
+            <select
+              className="px-3 py-1.5 border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-slate-200 cursor-pointer"
+              value={chartMode}
+              onChange={(e) => setChartMode(e.target.value)}
+            >
+              <option value="all" className="bg-[#0b1329] text-white">Patrimoine Global (MGA)</option>
+              {wallets.map(w => (
+                <option key={w.id} value={w.id} className="bg-[#0b1329] text-white">
+                  {w.name} ({w.currency})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {historyLoading ? (
+          <div className="h-64 flex flex-col items-center justify-center space-y-2">
+            <span className="h-8 w-8 border-3 border-cyan-500 border-t-transparent rounded-full animate-spin shadow-lg shadow-cyan-500/20" />
+            <span className="text-xs text-slate-400 font-sans">Chargement de l'historique...</span>
+          </div>
+        ) : globalHistory.length === 0 ? (
+          <div className="h-64 flex flex-col items-center justify-center text-center p-6 space-y-2 bg-[#131c35]/50 rounded-2xl border border-dashed border-slate-800">
+            <Info className="h-8 w-8 text-slate-500" />
+            <h4 className="font-semibold text-xs text-slate-400">Aucun historique disponible</h4>
+            <p className="text-[11px] text-slate-500 max-w-xs">Enregistrez des transactions pour générer l'analyse historique du compte.</p>
+          </div>
+        ) : (
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={globalHistory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#64748b" 
+                  fontSize={10} 
+                  tickLine={false} 
+                  axisLine={false} 
+                />
+                <YAxis 
+                  stroke="#64748b" 
+                  fontSize={10} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  width={80}
+                  tickFormatter={(val) => {
+                    if (chartMode === 'all') {
+                      return formatCurrency(val, 'MGA');
+                    } else {
+                      const selected = wallets.find(w => w.id === chartMode);
+                      return formatCurrency(val, selected?.currency || 'MGA');
+                    }
+                  }} 
+                />
+                <Tooltip 
+                  contentStyle={{ background: '#0b1329', border: '1px solid #1e293b', borderRadius: '12px', color: '#f8fafc', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }} 
+                  labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
+                  formatter={(value) => {
+                    if (chartMode === 'all') {
+                      return [formatCurrency(Number(value), 'MGA'), 'Patrimoine Total'];
+                    } else {
+                      const selected = wallets.find(w => w.id === chartMode);
+                      return [formatCurrency(Number(value), selected?.currency || 'MGA'), `Solde ${selected?.name}`];
+                    }
+                  }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey={chartMode === 'all' ? 'totalMGA' : chartMode} 
+                  stroke="#06b6d4" 
+                  strokeWidth={3} 
+                  fillOpacity={1}
+                  fill="url(#colorBalance)"
+                  dot={{ r: 4, strokeWidth: 2, fill: '#0b1329', stroke: '#22d3ee' }} 
+                  activeDot={{ r: 6 }} 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       {/* Bottom Grid: Recent Transactions & Wallet List */}
