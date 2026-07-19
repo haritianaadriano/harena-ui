@@ -474,6 +474,7 @@ export const api = {
   },
 
   async getRecommendations(
+    userId: string,
     walletId: string,
     page: number = 1,
     pageSize: number = 10
@@ -481,8 +482,53 @@ export const api = {
     if (isDemoMode()) {
       return mockRecommendations.filter(r => r.wallet_id === walletId);
     }
-    const res = await request<WalletRecommendation[]>(`/wallets/${walletId}/recommendations?page=${page}&page_size=${pageSize}`);
+    const res = await request<WalletRecommendation[]>(`/users/${userId}//wallets/${walletId}/recommendations?page=${page}&page_size=${pageSize}`);
     return Array.isArray(res) ? res : [];
+  },
+
+  async launchRecommendation(
+    userId: string,
+    walletId: string,
+    recommendationType: string
+  ): Promise<WalletRecommendation | null> {
+    if (isDemoMode()) {
+      const responses: { [key: string]: string } = {
+        'GENERAL': "Voici vos conseils généraux pour ce portefeuille : optimisez vos abonnements non utilisés, réduisez vos dépenses de restauration de 10% et visez une épargne automatique de 150 000 Ar par mois.",
+        'BUDGET_ANALYSIS': "Analyse budgétaire : Votre budget de divertissement est consommé à 85% alors que nous ne sommes qu'à la moitié du mois. Nous vous suggérons de geler les dépenses non essentielles sur cette catégorie pour les 10 prochains jours.",
+        'SPENDING_ANALYSIS': "Analyse des dépenses : Vos dépenses dans la catégorie 'Alimentation & Courses' ont augmenté de 18% par rapport au mois dernier. Privilégiez les achats en gros pour réduire la facture.",
+        'SAVING_RECOMMENDATION': "Conseil Épargne : Vous pouvez économiser jusqu'à 300 000 Ar par mois en remplaçant deux sorties hebdomadaires par des activités gratuites. Ce montant placé sur votre compte d'épargne accélérera votre projet de 3 mois."
+      };
+      const contextMap: { [key: string]: string } = {
+        'GENERAL': 'Recommandation globale de santé financière',
+        'BUDGET_ANALYSIS': 'Analyse des enveloppes budgétaires',
+        'SPENDING_ANALYSIS': 'Analyse comportementale des dépenses',
+        'SAVING_RECOMMENDATION': 'Stratégie de maximisation de l\'épargne'
+      };
+      const promptMap: { [key: string]: string } = {
+        'GENERAL': 'Générer une recommandation générale pour mon compte',
+        'BUDGET_ANALYSIS': 'Analyser mon budget et ses limites actuelles',
+        'SPENDING_ANALYSIS': 'Analyser mes habitudes de dépenses récentes',
+        'SAVING_RECOMMENDATION': 'Me proposer un plan d\'épargne personnalisé'
+      };
+
+      const newRec: WalletRecommendation = {
+        id: `rec-${Date.now()}`,
+        wallet_id: walletId,
+        type: recommendationType,
+        context: contextMap[recommendationType] || 'Conseil personnalisé',
+        prompt: promptMap[recommendationType] || `Générer une recommandation de type ${recommendationType}`,
+        response: responses[recommendationType] || "Recommandation en cours d'analyse par l'intelligence artificielle Harena.",
+        confidence_score: 0.85 + Math.random() * 0.15,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        creation_datetime: new Date().toISOString()
+      };
+      mockRecommendations.unshift(newRec);
+      return newRec;
+    }
+    const res = await request<WalletRecommendation>(`/users/${userId}//wallets/${walletId}/recommendations?recommendation_type=${encodeURIComponent(recommendationType)}`, {
+      method: 'PUT'
+    });
+    return res;
   }
 };
 
@@ -1048,6 +1094,55 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
     const goal = demoGoals.find(g => g.id === gId);
     if (!goal) throw new Error('Objectif introuvable');
     return goal as unknown as T;
+  }
+
+  // GET or PUT /users/{user_id}//wallets/{wallet_id}/recommendations
+  if (parts[0] === 'users' && parts[2] === 'wallets' && parts[4] === 'recommendations') {
+    const walletId = parts[3];
+    if (options.method === 'PUT') {
+      // Find the recommendation type from path query string or fallback
+      let recType = 'GENERAL';
+      const qIdx = path.indexOf('?');
+      if (qIdx !== -1) {
+        const queryStr = path.substring(qIdx + 1);
+        const params = new URLSearchParams(queryStr);
+        recType = params.get('recommendation_type') || 'GENERAL';
+      }
+
+      const responses: { [key: string]: string } = {
+        'GENERAL': "Voici vos conseils généraux pour ce portefeuille : optimisez vos abonnements non utilisés, réduisez vos dépenses de restauration de 10% et visez une épargne automatique de 150 000 Ar par mois.",
+        'BUDGET_ANALYSIS': "Analyse budgétaire : Votre budget de divertissement est consommé à 85% alors que nous ne sommes qu'à la moitié du mois. Nous vous suggérons de geler les dépenses non essentielles sur cette catégorie pour les 10 prochains jours.",
+        'SPENDING_ANALYSIS': "Analyse des dépenses : Vos dépenses dans la catégorie 'Alimentation & Courses' ont augmenté de 18% par rapport au mois dernier. Privilégiez les achats en gros pour réduire la facture.",
+        'SAVING_RECOMMENDATION': "Conseil Épargne : Vous pouvez économiser jusqu'à 300 000 Ar par mois en remplaçant deux sorties hebdomadaires par des activités gratuites. Ce montant placé sur votre compte d'épargne accélérera votre projet de 3 mois."
+      };
+      const contextMap: { [key: string]: string } = {
+        'GENERAL': 'Recommandation globale de santé financière',
+        'BUDGET_ANALYSIS': 'Analyse des enveloppes budgétaires',
+        'SPENDING_ANALYSIS': 'Analyse comportementale des dépenses',
+        'SAVING_RECOMMENDATION': 'Stratégie de maximisation de l\'épargne'
+      };
+      const promptMap: { [key: string]: string } = {
+        'GENERAL': 'Générer une recommandation générale pour mon compte',
+        'BUDGET_ANALYSIS': 'Analyser mon budget et ses limites actuelles',
+        'SPENDING_ANALYSIS': 'Analyser mes habitudes de dépenses récentes',
+        'SAVING_RECOMMENDATION': 'Me proposer un plan d\'épargne personnalisé'
+      };
+
+      const newRec: WalletRecommendation = {
+        id: `rec-${Date.now()}`,
+        wallet_id: walletId,
+        type: recType,
+        context: contextMap[recType] || 'Conseil personnalisé',
+        prompt: promptMap[recType] || `Générer une recommandation de type ${recType}`,
+        response: responses[recType] || "Recommandation en cours d'analyse par l'intelligence artificielle Harena.",
+        confidence_score: 0.85 + Math.random() * 0.15,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        creation_datetime: new Date().toISOString()
+      };
+      mockRecommendations.unshift(newRec);
+      return newRec as unknown as T;
+    }
+    return mockRecommendations.filter(r => r.wallet_id === walletId) as unknown as T;
   }
 
   // Fallback default

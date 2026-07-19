@@ -36,6 +36,25 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
   const [historyLoading, setHistoryLoading] = useState(false);
   const [chartMode, setChartMode] = useState<string>('all'); // 'all' or specific wallet ID
   const [activeRecIndex, setActiveRecIndex] = useState(0);
+  const [generatingRec, setGeneratingRec] = useState(false);
+  const [selectedRecType, setSelectedRecType] = useState('BUDGET_ANALYSIS');
+
+  const handleGenerateManualRecommendation = async () => {
+    if (wallets.length === 0) return;
+    const mainWallet = wallets[0];
+    try {
+      setGeneratingRec(true);
+      const newRec = await api.launchRecommendation(currentUser.id, mainWallet.id, selectedRecType);
+      if (newRec) {
+        setRecommendations(prev => [newRec, ...prev]);
+        setActiveRecIndex(0); // Show the new recommendation immediately
+      }
+    } catch (err) {
+      console.error('Error generating custom recommendation', err);
+    } finally {
+      setGeneratingRec(false);
+    }
+  };
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -67,8 +86,22 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
           const txs = await api.getTransactions(currentUser.id, mainWallet.id);
           setRecentTransactions(txs.slice(0, 4));
 
-          // Fetch active recommendations
-          const recs = await api.getRecommendations(mainWallet.id);
+          // Fetch active recommendations using new userId parameter
+          let recs = await api.getRecommendations(currentUser.id, mainWallet.id);
+          
+          // Startup requirement: Launch a recommendation of type GENERAL on load if none exists
+          const hasGeneral = recs.some(r => r.type === 'GENERAL');
+          if (!hasGeneral) {
+            try {
+              const startRec = await api.launchRecommendation(currentUser.id, mainWallet.id, 'GENERAL');
+              if (startRec) {
+                recs = [startRec, ...recs];
+              }
+            } catch (err) {
+              console.error('Error launching starting general recommendation', err);
+            }
+          }
+          
           setRecommendations(recs);
         }
 
@@ -205,47 +238,102 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
         </div>
       </div>
 
-      {/* AI Advice Banner */}
+      {/* AI Advice & Recommendation Generator Banner */}
       {recommendations.length > 0 && (
         <div className="bg-gradient-to-r from-[#0d1c3a] via-[#090f24] to-[#04334a] text-white rounded-3xl p-6 shadow-lg shadow-cyan-500/5 border border-cyan-500/20 relative overflow-hidden animate-fade-in">
           {/* Decorative Sparkle Background */}
           <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-10 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.25)_0%,transparent_70%)] pointer-events-none" />
           
-          <div className="flex items-start gap-4">
-            <div className="h-10 w-10 bg-cyan-500/20 rounded-xl flex items-center justify-center text-cyan-400 shrink-0 border border-cyan-500/30 shadow-md shadow-cyan-500/10">
-              <Sparkles className="h-5 w-5 animate-pulse" />
-            </div>
-            <div className="space-y-2 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-                  Recommandation Smart Harena
-                </span>
-                <span className="text-[10px] bg-cyan-500/20 text-cyan-300 font-medium px-2 py-0.5 rounded-full border border-cyan-500/30 font-mono">
-                  Score de confiance : {Math.round(recommendations[activeRecIndex].confidence_score * 100)}%
-                </span>
-              </div>
-              <h4 className="font-semibold text-sm text-slate-100">
-                {recommendations[activeRecIndex].context}
-              </h4>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {recommendations[activeRecIndex].response}
-              </p>
-              
-              {/* Slider Dots if multiple */}
-              {recommendations.length > 1 && (
-                <div className="flex items-center gap-1.5 pt-2">
-                  {recommendations.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setActiveRecIndex(idx)}
-                      className={`h-1.5 rounded-full transition-all duration-250 cursor-pointer ${
-                        idx === activeRecIndex ? 'w-4 bg-cyan-400' : 'w-1.5 bg-slate-800'
-                      }`}
-                    />
-                  ))}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10 items-center">
+            
+            {/* Left side: Active recommendation detail */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 bg-cyan-500/20 rounded-xl flex items-center justify-center text-cyan-400 shrink-0 border border-cyan-500/30 shadow-md shadow-cyan-500/10">
+                  <Sparkles className="h-5 w-5 animate-pulse" />
                 </div>
-              )}
+                <div className="space-y-2 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                      Recommandation Smart Harena
+                    </span>
+                    <span className="text-[10px] bg-cyan-500/20 text-cyan-300 font-medium px-2 py-0.5 rounded-full border border-cyan-500/30 font-mono">
+                      Confiance : {Math.round(recommendations[activeRecIndex].confidence_score * 100)}%
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                    <span className="px-2 py-0.5 text-[9px] bg-cyan-900/60 border border-cyan-500/25 rounded-md text-cyan-300 font-mono uppercase">
+                      {recommendations[activeRecIndex].type}
+                    </span>
+                    <span>{recommendations[activeRecIndex].context}</span>
+                  </h4>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {recommendations[activeRecIndex].response}
+                  </p>
+                  
+                  {/* Slider Dots if multiple */}
+                  {recommendations.length > 1 && (
+                    <div className="flex items-center gap-1.5 pt-2">
+                      {recommendations.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setActiveRecIndex(idx)}
+                          className={`h-1.5 rounded-full transition-all duration-250 cursor-pointer ${
+                            idx === activeRecIndex ? 'w-4 bg-cyan-400' : 'w-1.5 bg-slate-800'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+
+            {/* Right side: Custom recommendation generator */}
+            <div className="bg-[#070d1e]/50 p-4 rounded-2xl border border-slate-800/80 space-y-3">
+              <div>
+                <h5 className="text-xs font-bold text-white flex items-center gap-1.5 font-sans">
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
+                  <span>Demander un conseil ciblé</span>
+                </h5>
+                <p className="text-[10px] text-slate-400">Générez instantanément des analyses IA sur-mesure.</p>
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Type d'analyse</label>
+                  <select
+                    className="w-full px-3 py-1.5 bg-[#0b1329] border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-slate-200 cursor-pointer"
+                    value={selectedRecType}
+                    onChange={(e) => setSelectedRecType(e.target.value)}
+                  >
+                    <option value="BUDGET_ANALYSIS">Analyse de budget (BUDGET_ANALYSIS)</option>
+                    <option value="SPENDING_ANALYSIS">Analyse de dépenses (SPENDING_ANALYSIS)</option>
+                    <option value="SAVING_RECOMMENDATION">Conseil d'épargne (SAVING_RECOMMENDATION)</option>
+                    <option value="GENERAL">Conseils généraux (GENERAL)</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleGenerateManualRecommendation}
+                  disabled={generatingRec || wallets.length === 0}
+                  className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:from-slate-800 disabled:to-slate-900 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/10 transition-all cursor-pointer disabled:cursor-not-allowed disabled:text-slate-500"
+                >
+                  {generatingRec ? (
+                    <>
+                      <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Génération IA...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>Générer l'analyse</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
