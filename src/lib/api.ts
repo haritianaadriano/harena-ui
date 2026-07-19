@@ -482,7 +482,7 @@ export const api = {
     if (isDemoMode()) {
       return mockRecommendations.filter(r => r.wallet_id === walletId);
     }
-    const res = await request<WalletRecommendation[]>(`/users/${userId}//wallets/${walletId}/recommendations?page=${page}&page_size=${pageSize}`);
+    const res = await request<WalletRecommendation[]>(`/users/${userId}/wallets/${walletId}/recommendations?page=${page}&page_size=${pageSize}`);
     return Array.isArray(res) ? res : [];
   },
 
@@ -525,7 +525,7 @@ export const api = {
       mockRecommendations.unshift(newRec);
       return newRec;
     }
-    const res = await request<WalletRecommendation>(`/users/${userId}//wallets/${walletId}/recommendations?recommendation_type=${encodeURIComponent(recommendationType)}`, {
+    const res = await request<WalletRecommendation>(`/users/${userId}/wallets/${walletId}/recommendations?recommendation_type=${encodeURIComponent(recommendationType)}`, {
       method: 'PUT'
     });
     return res;
@@ -1096,7 +1096,7 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
     return goal as unknown as T;
   }
 
-  // GET or PUT /users/{user_id}//wallets/{wallet_id}/recommendations
+  // GET or PUT /users/{user_id}/wallets/{wallet_id}/recommendations
   if (parts[0] === 'users' && parts[2] === 'wallets' && parts[4] === 'recommendations') {
     const walletId = parts[3];
     if (options.method === 'PUT') {

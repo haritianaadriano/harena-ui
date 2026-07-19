@@ -10,7 +10,7 @@ import {
   Sparkles, Wallet as WalletIcon, TrendingUp, TrendingDown, 
   AlertTriangle, CheckCircle, ChevronRight, PieChart, 
   ShieldAlert, Activity, ArrowUpRight, ArrowDownLeft,
-  BarChart3, Info, Calendar
+  BarChart3, Info, Calendar, Clock
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
@@ -38,13 +38,14 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
   const [activeRecIndex, setActiveRecIndex] = useState(0);
   const [generatingRec, setGeneratingRec] = useState(false);
   const [selectedRecType, setSelectedRecType] = useState('BUDGET_ANALYSIS');
+  const [selectedRecWalletId, setSelectedRecWalletId] = useState<string>('');
+  const [recsLoading, setRecsLoading] = useState(false);
 
   const handleGenerateManualRecommendation = async () => {
-    if (wallets.length === 0) return;
-    const mainWallet = wallets[0];
+    if (!selectedRecWalletId) return;
     try {
       setGeneratingRec(true);
-      const newRec = await api.launchRecommendation(currentUser.id, mainWallet.id, selectedRecType);
+      const newRec = await api.launchRecommendation(currentUser.id, selectedRecWalletId, selectedRecType);
       if (newRec) {
         setRecommendations(prev => [newRec, ...prev]);
         setActiveRecIndex(0); // Show the new recommendation immediately
@@ -63,6 +64,9 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
         // Load wallets
         const walletsData = await api.getWallets(currentUser.id);
         setWallets(walletsData);
+        if (walletsData.length > 0 && !selectedRecWalletId) {
+          setSelectedRecWalletId(walletsData[0].id);
+        }
 
         // Fetch balances for all wallets
         const balancePromises = walletsData.map(async (w) => {
@@ -85,24 +89,6 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
           const mainWallet = walletsData[0];
           const txs = await api.getTransactions(currentUser.id, mainWallet.id);
           setRecentTransactions(txs.slice(0, 4));
-
-          // Fetch active recommendations using new userId parameter
-          let recs = await api.getRecommendations(currentUser.id, mainWallet.id);
-          
-          // Startup requirement: Launch a recommendation of type GENERAL on load if none exists
-          const hasGeneral = recs.some(r => r.type === 'GENERAL');
-          if (!hasGeneral) {
-            try {
-              const startRec = await api.launchRecommendation(currentUser.id, mainWallet.id, 'GENERAL');
-              if (startRec) {
-                recs = [startRec, ...recs];
-              }
-            } catch (err) {
-              console.error('Error launching starting general recommendation', err);
-            }
-          }
-          
-          setRecommendations(recs);
         }
 
         // Fetch budgets and goals
@@ -180,6 +166,39 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
     loadDashboardData();
   }, [currentUser.id]);
 
+  useEffect(() => {
+    if (!selectedRecWalletId || !currentUser.id) return;
+
+    async function fetchRecs() {
+      try {
+        setRecsLoading(true);
+        let recs = await api.getRecommendations(currentUser.id, selectedRecWalletId);
+        
+        // Launch general recommendation if none exists
+        const hasGeneral = recs.some(r => r.type === 'GENERAL');
+        if (!hasGeneral) {
+          try {
+            const startRec = await api.launchRecommendation(currentUser.id, selectedRecWalletId, 'GENERAL');
+            if (startRec) {
+              recs = [startRec, ...recs];
+            }
+          } catch (err) {
+            console.error('Error launching starting general recommendation', err);
+          }
+        }
+        
+        setRecommendations(recs);
+        setActiveRecIndex(0);
+      } catch (err) {
+        console.error('Error loading recommendations', err);
+      } finally {
+        setRecsLoading(false);
+      }
+    }
+
+    fetchRecs();
+  }, [selectedRecWalletId, currentUser.id]);
+
   // Calculate stats
   const totalBalanceMGA = wallets
     .filter(w => w.currency === 'MGA')
@@ -238,105 +257,238 @@ export default function Dashboard({ currentUser, setActiveTab, setSelectedWallet
         </div>
       </div>
 
-      {/* AI Advice & Recommendation Generator Banner */}
-      {recommendations.length > 0 && (
-        <div className="bg-gradient-to-r from-[#0d1c3a] via-[#090f24] to-[#04334a] text-white rounded-3xl p-6 shadow-lg shadow-cyan-500/5 border border-cyan-500/20 relative overflow-hidden animate-fade-in">
-          {/* Decorative Sparkle Background */}
-          <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-10 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.25)_0%,transparent_70%)] pointer-events-none" />
+      {/* AI Advice & Recommendation Generator Block */}
+      <div className="bg-gradient-to-r from-[#0d1c3a] via-[#090f24] to-[#04334a] text-white rounded-3xl p-6 shadow-lg shadow-cyan-500/5 border border-cyan-500/20 relative overflow-hidden animate-fade-in space-y-6">
+        {/* Decorative Sparkle Background */}
+        <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-10 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.25)_0%,transparent_70%)] pointer-events-none" />
+        
+        {/* Header: Title and Account Switcher */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80 pb-4 relative z-10">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 bg-cyan-500/15 rounded-lg flex items-center justify-center text-cyan-400">
+              <Sparkles className="h-3.5 w-3.5" />
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-100">
+              Conseils de l'IA Harena
+            </h3>
+          </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10 items-center">
-            
-            {/* Left side: Active recommendation detail */}
-            <div className="lg:col-span-2 space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="h-10 w-10 bg-cyan-500/20 rounded-xl flex items-center justify-center text-cyan-400 shrink-0 border border-cyan-500/30 shadow-md shadow-cyan-500/10">
-                  <Sparkles className="h-5 w-5 animate-pulse" />
-                </div>
-                <div className="space-y-2 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-                      Recommandation Smart Harena
-                    </span>
-                    <span className="text-[10px] bg-cyan-500/20 text-cyan-300 font-medium px-2 py-0.5 rounded-full border border-cyan-500/30 font-mono">
-                      Confiance : {Math.round(recommendations[activeRecIndex].confidence_score * 100)}%
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                    <span className="px-2 py-0.5 text-[9px] bg-cyan-900/60 border border-cyan-500/25 rounded-md text-cyan-300 font-mono uppercase">
-                      {recommendations[activeRecIndex].type}
-                    </span>
-                    <span>{recommendations[activeRecIndex].context}</span>
-                  </h4>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    {recommendations[activeRecIndex].response}
-                  </p>
-                  
-                  {/* Slider Dots if multiple */}
-                  {recommendations.length > 1 && (
-                    <div className="flex items-center gap-1.5 pt-2">
-                      {recommendations.map((_, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setActiveRecIndex(idx)}
-                          className={`h-1.5 rounded-full transition-all duration-250 cursor-pointer ${
-                            idx === activeRecIndex ? 'w-4 bg-cyan-400' : 'w-1.5 bg-slate-800'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right side: Custom recommendation generator */}
-            <div className="bg-[#070d1e]/50 p-4 rounded-2xl border border-slate-800/80 space-y-3">
-              <div>
-                <h5 className="text-xs font-bold text-white flex items-center gap-1.5 font-sans">
-                  <Sparkles className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
-                  <span>Demander un conseil ciblé</span>
-                </h5>
-                <p className="text-[10px] text-slate-400">Générez instantanément des analyses IA sur-mesure.</p>
-              </div>
-
-              <div className="space-y-2.5">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Type d'analyse</label>
-                  <select
-                    className="w-full px-3 py-1.5 bg-[#0b1329] border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-slate-200 cursor-pointer"
-                    value={selectedRecType}
-                    onChange={(e) => setSelectedRecType(e.target.value)}
-                  >
-                    <option value="BUDGET_ANALYSIS">Analyse de budget (BUDGET_ANALYSIS)</option>
-                    <option value="SPENDING_ANALYSIS">Analyse de dépenses (SPENDING_ANALYSIS)</option>
-                    <option value="SAVING_RECOMMENDATION">Conseil d'épargne (SAVING_RECOMMENDATION)</option>
-                    <option value="GENERAL">Conseils généraux (GENERAL)</option>
-                  </select>
-                </div>
-
-                <button
-                  onClick={handleGenerateManualRecommendation}
-                  disabled={generatingRec || wallets.length === 0}
-                  className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:from-slate-800 disabled:to-slate-900 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/10 transition-all cursor-pointer disabled:cursor-not-allowed disabled:text-slate-500"
-                >
-                  {generatingRec ? (
-                    <>
-                      <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Génération IA...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-3.5 w-3.5" />
-                      <span>Générer l'analyse</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-400 font-medium">Compte ciblé :</span>
+            <select
+              value={selectedRecWalletId}
+              onChange={(e) => {
+                setSelectedRecWalletId(e.target.value);
+                setActiveRecIndex(0);
+              }}
+              className="px-3 py-1 bg-[#070c1e] border border-slate-800/80 rounded-xl text-xs text-cyan-400 font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-500/20 cursor-pointer font-sans shadow-inner hover:border-slate-700"
+            >
+              {wallets.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} ({w.currency})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      )}
+
+        {/* Main Content Pane */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10 items-start">
+          
+          {/* Left side: Active recommendation detail / Loading State */}
+          <div className="lg:col-span-2 space-y-4">
+            {recsLoading ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-3 bg-[#070d1e]/30 rounded-2xl border border-slate-800/40">
+                <span className="h-8 w-8 border-3 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs text-slate-400 font-sans">Analyse des opportunités financières...</p>
+              </div>
+            ) : recommendations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-2 bg-[#070d1e]/30 rounded-2xl border border-slate-800/40">
+                <Info className="h-8 w-8 text-slate-500" />
+                <h4 className="text-sm font-semibold text-slate-300">Aucun conseil généré</h4>
+                <p className="text-xs text-slate-400 max-w-sm">
+                  Utilisez le module à droite pour lancer une analyse personnalisée et obtenir des conseils financiers ciblés de l'IA.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {(() => {
+                  const activeRec = recommendations[activeRecIndex];
+                  if (!activeRec) return null;
+                  
+                  const dateObj = new Date(activeRec.creation_datetime || Date.now());
+                  const formattedDate = dateObj.toLocaleDateString('fr-FR', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                  }) + ' à ' + dateObj.toLocaleTimeString('fr-FR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+
+                  return (
+                    <div className="flex items-start gap-4">
+                      <div className="h-10 w-10 bg-cyan-500/20 rounded-xl flex items-center justify-center text-cyan-400 shrink-0 border border-cyan-500/30 shadow-md shadow-cyan-500/10">
+                        <Sparkles className="h-5 w-5 animate-pulse" />
+                      </div>
+                      <div className="space-y-2 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-cyan-400 flex items-center gap-1.5 uppercase tracking-wider">
+                            Recommandation Smart Harena
+                          </span>
+                          <span className="text-[10px] bg-cyan-500/20 text-cyan-300 font-medium px-2 py-0.5 rounded-full border border-cyan-500/30 font-mono">
+                            Confiance : {Math.round(activeRec.confidence_score * 100)}%
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                          <span className="px-2 py-0.5 text-[9px] bg-cyan-900/60 border border-cyan-500/25 rounded-md text-cyan-300 font-mono uppercase">
+                            {activeRec.type}
+                          </span>
+                          <span>{activeRec.context}</span>
+                        </h4>
+                        <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                          {activeRec.response}
+                        </p>
+                        <div className="text-[10px] text-slate-400 font-medium font-mono pt-1">
+                          Conseil généré le : {formattedDate}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Slider Dots Indicator if multiple */}
+                {recommendations.length > 1 && (
+                  <div className="flex items-center gap-1.5 pl-14">
+                    {recommendations.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setActiveRecIndex(idx)}
+                        className={`h-1.5 rounded-full transition-all duration-250 cursor-pointer ${
+                          idx === activeRecIndex ? 'w-4 bg-cyan-400' : 'w-1.5 bg-slate-800'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right side: Custom recommendation generator */}
+          <div className="bg-[#070d1e]/50 p-4 rounded-2xl border border-slate-800/80 space-y-3">
+            <div>
+              <h5 className="text-xs font-bold text-white flex items-center gap-1.5 font-sans">
+                <Sparkles className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />
+                <span>Demander un conseil ciblé</span>
+              </h5>
+              <p className="text-[10px] text-slate-400">Générez instantanément des analyses IA sur-mesure.</p>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Type d'analyse</label>
+                <select
+                  className="w-full px-3 py-1.5 bg-[#0b1329] border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-slate-200 cursor-pointer font-sans"
+                  value={selectedRecType}
+                  onChange={(e) => setSelectedRecType(e.target.value)}
+                >
+                  <option value="BUDGET_ANALYSIS">Analyse de budget (BUDGET_ANALYSIS)</option>
+                  <option value="SPENDING_ANALYSIS">Analyse de dépenses (SPENDING_ANALYSIS)</option>
+                  <option value="SAVING_RECOMMENDATION">Conseil d'épargne (SAVING_RECOMMENDATION)</option>
+                  <option value="GENERAL">Conseils généraux (GENERAL)</option>
+                </select>
+              </div>
+
+              <button
+                onClick={handleGenerateManualRecommendation}
+                disabled={generatingRec || !selectedRecWalletId}
+                className="w-full py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:from-slate-800 disabled:to-slate-900 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/10 transition-all cursor-pointer disabled:cursor-not-allowed disabled:text-slate-500 font-sans"
+              >
+                {generatingRec ? (
+                  <>
+                    <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Génération IA...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>Générer l'analyse</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Historique des Recommandations Table / List */}
+        {recommendations.length > 0 && !recsLoading && (
+          <div className="mt-6 pt-5 border-t border-slate-800/80 relative z-10">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-4 w-4 text-cyan-400" />
+              <h5 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-sans">
+                Historique des recommandations de ce portefeuille ({recommendations.length})
+              </h5>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
+              {recommendations.map((rec, idx) => {
+                const isSelected = idx === activeRecIndex;
+                const dateObj = new Date(rec.creation_datetime || Date.now());
+                const formattedDate = dateObj.toLocaleDateString('fr-FR', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                }) + ' ' + dateObj.toLocaleTimeString('fr-FR', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+                
+                return (
+                  <button
+                    key={rec.id}
+                    onClick={() => setActiveRecIndex(idx)}
+                    className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                      isSelected 
+                        ? 'bg-cyan-950/25 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.1)]' 
+                        : 'bg-[#080d1e]/50 border-slate-800/80 hover:border-slate-700 hover:bg-[#0c142b]/50'
+                    }`}
+                  >
+                    <div className="space-y-1.5 w-full">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`px-2 py-0.5 text-[8px] font-mono font-bold rounded ${
+                          rec.type === 'BUDGET_ANALYSIS' 
+                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' 
+                            : rec.type === 'SPENDING_ANALYSIS' 
+                            ? 'bg-purple-500/15 text-purple-400 border border-purple-500/20'
+                            : rec.type === 'SAVING_RECOMMENDATION'
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
+                        }`}>
+                          {rec.type}
+                        </span>
+                        <span className="text-[9px] text-slate-400 flex items-center gap-1 font-mono font-medium">
+                          <Calendar className="h-3 w-3 shrink-0" />
+                          {formattedDate}
+                        </span>
+                      </div>
+                      
+                      <h6 className="font-bold text-xs text-slate-200 line-clamp-1">
+                        {rec.context}
+                      </h6>
+                      
+                      <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed font-sans">
+                        {rec.response}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Grid: Balances & Core KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
