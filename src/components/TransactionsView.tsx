@@ -9,7 +9,8 @@ import { User, Wallet, WalletTransaction, TransactionCategory, TransactionType, 
 import { 
   Plus, Calendar, Filter, Sparkles, AlertTriangle, 
   CheckCircle2, XCircle, Clock, Info, ShieldCheck, 
-  HelpCircle, ChevronRight, CornerDownRight, ArrowUpRight, ArrowDownLeft
+  HelpCircle, ChevronRight, CornerDownRight, ArrowUpRight, ArrowDownLeft,
+  Pencil, Check
 } from 'lucide-react';
 import * as Icons from 'lucide-react';
 
@@ -48,6 +49,118 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
   const [txWalletId, setTxWalletId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+
+  // Edit Transaction State
+  const [editingTx, setEditingTx] = useState<WalletTransaction | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editAmount, setEditAmount] = useState('');
+  const [editType, setEditType] = useState<TransactionType>('EXPENSE');
+  const [editStatus, setEditStatus] = useState<TransactionStatus>('COMPLETED');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editReference, setEditReference] = useState('');
+  const [editSource, setEditSource] = useState('');
+  const [editWalletId, setEditWalletId] = useState('');
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [editFormLoading, setEditFormLoading] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+
+  const handleOpenEditModal = (tx: WalletTransaction) => {
+    setEditingTx(tx);
+    setEditAmount(tx.amount.toString());
+    setEditType(tx.type);
+    setEditStatus(tx.status);
+    setEditDescription(tx.description);
+    setEditCategoryId(tx.category?.id || (categories[0]?.id || ''));
+    setEditReference(tx.reference || '');
+    setEditSource(tx.source || '');
+    setEditWalletId(tx.wallet.id);
+    setEditFormError(null);
+    setShowEditModal(true);
+  };
+
+  const handleQuickStatusChange = async (tx: WalletTransaction, newStatus: TransactionStatus, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setStatusUpdatingId(tx.id);
+      const updatedTx = await api.updateTransaction(currentUser.id, tx.wallet.id, {
+        id: tx.id,
+        wallet: tx.wallet,
+        category: tx.category,
+        amount: tx.amount,
+        type: tx.type,
+        status: newStatus,
+        description: tx.description,
+        reference: tx.reference,
+        source: tx.source,
+      });
+
+      // Update in transactions list
+      setTransactions(prev => prev.map(item => item.id === tx.id ? updatedTx : item));
+
+      // Update selectedTx if it's the currently selected one
+      if (selectedTx?.id === tx.id) {
+        setSelectedTx(updatedTx);
+      }
+    } catch (err) {
+      console.error('Error updating transaction status', err);
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  };
+
+  const handleSaveEditTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTx) return;
+
+    setEditFormError(null);
+    setEditFormLoading(true);
+
+    const amountNum = parseFloat(editAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setEditFormError('Veuillez entrer un montant valide supérieur à 0.');
+      setEditFormLoading(false);
+      return;
+    }
+
+    if (!editDescription.trim()) {
+      setEditFormError('La description est obligatoire.');
+      setEditFormLoading(false);
+      return;
+    }
+
+    const matchedCategory = categories.find(c => c.id === editCategoryId) || null;
+    const targetWalletObj = wallets.find(w => w.id === editWalletId) || editingTx.wallet;
+
+    try {
+      const updatedTx = await api.updateTransaction(currentUser.id, targetWalletObj.id, {
+        id: editingTx.id,
+        wallet: targetWalletObj,
+        amount: amountNum,
+        type: editType,
+        status: editStatus,
+        description: editDescription.trim(),
+        category: matchedCategory,
+        reference: editReference.trim() || undefined,
+        source: editSource.trim() || undefined,
+      });
+
+      // Update local state list
+      setTransactions(prev => prev.map(t => t.id === editingTx.id ? updatedTx : t));
+      
+      // Update selectedTx if editing the current selected transaction
+      if (selectedTx?.id === editingTx.id) {
+        setSelectedTx(updatedTx);
+      }
+
+      setShowEditModal(false);
+      setEditingTx(null);
+    } catch (err: any) {
+      setEditFormError(err.message || 'Impossible de modifier la transaction.');
+    } finally {
+      setEditFormLoading(false);
+    }
+  };
 
   // Category Modal & Form States
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -493,13 +606,39 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                       </div>
                     </div>
 
-                    <div className="text-right space-y-1">
+                    <div className="text-right space-y-1 shrink-0">
                       <div className={`font-bold text-sm ${isExpense ? 'text-slate-300' : 'text-cyan-400 font-sans'}`}>
                         {isExpense ? '-' : '+'}{formatCurrency(tx.amount, tx.wallet.currency)}
                       </div>
                       <div className="flex items-center gap-1.5 justify-end">
-                        {getStatusIcon(tx.status)}
-                        <span className="text-[9px] text-slate-500 font-bold uppercase font-mono">{tx.type}</span>
+                        {tx.status === 'PENDING' ? (
+                          <button
+                            onClick={(e) => handleQuickStatusChange(tx, 'COMPLETED', e)}
+                            title="Cliquer pour passer en Complété"
+                            className="px-2 py-0.5 bg-amber-500/20 text-amber-300 hover:bg-cyan-500/20 hover:text-cyan-300 border border-amber-500/30 hover:border-cyan-500/40 rounded-md text-[9px] font-bold uppercase font-mono flex items-center gap-1 transition-all cursor-pointer group/btn shadow-xs"
+                          >
+                            <Clock className="h-3 w-3 text-amber-400 group-hover/btn:hidden animate-pulse" />
+                            <CheckCircle2 className="h-3 w-3 text-cyan-400 hidden group-hover/btn:block" />
+                            <span>En attente → Compléter</span>
+                          </button>
+                        ) : (
+                          <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase font-mono flex items-center gap-1 ${getStatusStyle(tx.status)}`}>
+                            {getStatusIcon(tx.status)}
+                            <span>{tx.status}</span>
+                          </span>
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTx(tx);
+                            handleOpenEditModal(tx);
+                          }}
+                          title="Éditer la transaction"
+                          className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800/80 rounded-lg transition-all cursor-pointer"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -516,12 +655,21 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
               
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Détails de la transaction</span>
-                <button 
-                  onClick={() => setSelectedTx(null)}
-                  className="text-xs font-semibold text-slate-400 hover:text-white cursor-pointer"
-                >
-                  Fermer
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => handleOpenEditModal(selectedTx)}
+                    className="px-2.5 py-1 bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 border border-cyan-500/30 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    <span>Éditer</span>
+                  </button>
+                  <button 
+                    onClick={() => setSelectedTx(null)}
+                    className="text-xs font-semibold text-slate-400 hover:text-white cursor-pointer px-1 py-1"
+                  >
+                    Fermer
+                  </button>
+                </div>
               </div>
 
               {/* Transaction Receipt style */}
@@ -562,6 +710,75 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
                   <div>
                     <span className="text-slate-400 block">ID Référence</span>
                     <span className="font-mono text-slate-500 text-[10px] truncate block max-w-[120px]">{selectedTx.reference || 'Aucune'}</span>
+                  </div>
+                </div>
+
+                {/* Quick Status Action Switcher */}
+                <div className="bg-[#131c35]/40 p-3.5 rounded-2xl border border-slate-800/80 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Statut :</span>
+                      <span className={`px-2 py-0.5 text-[10px] rounded-md font-mono ${getStatusStyle(selectedTx.status)}`}>
+                        {selectedTx.status}
+                      </span>
+                    </span>
+                    {statusUpdatingId === selectedTx.id && (
+                      <span className="h-3.5 w-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <button
+                      onClick={() => handleQuickStatusChange(selectedTx, 'COMPLETED')}
+                      disabled={selectedTx.status === 'COMPLETED' || statusUpdatingId === selectedTx.id}
+                      className={`py-1.5 px-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        selectedTx.status === 'COMPLETED'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 opacity-90'
+                          : 'bg-[#0b1329] text-slate-300 hover:text-white hover:bg-cyan-950/40 border border-slate-800'
+                      }`}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>Complété</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleQuickStatusChange(selectedTx, 'PENDING')}
+                      disabled={selectedTx.status === 'PENDING' || statusUpdatingId === selectedTx.id}
+                      className={`py-1.5 px-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        selectedTx.status === 'PENDING'
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 opacity-90'
+                          : 'bg-[#0b1329] text-slate-300 hover:text-white hover:bg-amber-950/40 border border-slate-800'
+                      }`}
+                    >
+                      <Clock className="h-3.5 w-3.5 text-amber-400" />
+                      <span>En attente</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleQuickStatusChange(selectedTx, 'CANCELLED')}
+                      disabled={selectedTx.status === 'CANCELLED' || statusUpdatingId === selectedTx.id}
+                      className={`py-1.5 px-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        selectedTx.status === 'CANCELLED'
+                          ? 'bg-slate-700/40 text-slate-200 border border-slate-600 opacity-90'
+                          : 'bg-[#0b1329] text-slate-300 hover:text-white hover:bg-slate-800/60 border border-slate-800'
+                      }`}
+                    >
+                      <Info className="h-3.5 w-3.5 text-slate-400" />
+                      <span>Annulé</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleQuickStatusChange(selectedTx, 'FAILED')}
+                      disabled={selectedTx.status === 'FAILED' || statusUpdatingId === selectedTx.id}
+                      className={`py-1.5 px-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        selectedTx.status === 'FAILED'
+                          ? 'bg-red-500/20 text-red-300 border border-red-500/40 opacity-90'
+                          : 'bg-[#0b1329] text-slate-300 hover:text-white hover:bg-red-950/40 border border-slate-800'
+                      }`}
+                    >
+                      <XCircle className="h-3.5 w-3.5 text-red-400" />
+                      <span>Échoué</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -990,6 +1207,171 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Edit Transaction Modal */}
+      {showEditModal && editingTx && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#0b1329] rounded-3xl max-w-lg w-full border border-slate-800 shadow-2xl p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <h3 className="text-lg font-bold text-white tracking-tight">Modifier la transaction</h3>
+              </div>
+              <button 
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 cursor-pointer"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditTransaction} className="space-y-4">
+              {editFormError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{editFormError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Portefeuille</label>
+                  <select
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white cursor-pointer"
+                    value={editWalletId}
+                    onChange={(e) => setEditWalletId(e.target.value)}
+                  >
+                    {wallets.map(w => (
+                      <option key={w.id} value={w.id} className="bg-[#0b1329] text-white">
+                        {w.name} ({w.currency})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Montant</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="0.00"
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white font-mono"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Description / Intitulé</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Achat fournitures, Virement..."
+                  className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Type d'opération</label>
+                  <select
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white cursor-pointer"
+                    value={editType}
+                    onChange={(e) => setEditType(e.target.value as TransactionType)}
+                  >
+                    <option value="EXPENSE" className="bg-[#0b1329]">Dépense (EXPENSE)</option>
+                    <option value="INCOME" className="bg-[#0b1329]">Revenu (INCOME)</option>
+                    <option value="TRANSFER" className="bg-[#0b1329]">Virement (TRANSFER)</option>
+                    <option value="SUBSCRIPTION" className="bg-[#0b1329]">Abonnement (SUBSCRIPTION)</option>
+                    <option value="REFUND" className="bg-[#0b1329]">Remboursement (REFUND)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Statut</label>
+                  <select
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white cursor-pointer font-mono"
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as TransactionStatus)}
+                  >
+                    <option value="COMPLETED" className="bg-[#0b1329] text-cyan-400">Complété (COMPLETED)</option>
+                    <option value="PENDING" className="bg-[#0b1329] text-amber-400">En attente (PENDING)</option>
+                    <option value="CANCELLED" className="bg-[#0b1329] text-slate-400">Annulé (CANCELLED)</option>
+                    <option value="FAILED" className="bg-[#0b1329] text-red-400">Échoué (FAILED)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Catégorie</label>
+                <select
+                  className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white cursor-pointer"
+                  value={editCategoryId}
+                  onChange={(e) => setEditCategoryId(e.target.value)}
+                >
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id} className="bg-[#0b1329]">
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Source / Tiers</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Orange Money, BNI..."
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white"
+                    value={editSource}
+                    onChange={(e) => setEditSource(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Référence</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: REF-99201"
+                    className="px-3 py-2 w-full border border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-[#131c35]/50 text-white font-mono"
+                    value={editReference}
+                    onChange={(e) => setEditReference(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 border border-slate-800 hover:bg-[#131c35] text-slate-300 font-semibold py-2.5 px-4 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={editFormLoading}
+                  className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-[#020617] font-extrabold py-2.5 px-4 rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                >
+                  {editFormLoading ? (
+                    <span className="h-4 w-4 border-2 border-[#020617] border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" />
+                      <span>Enregistrer les modifications</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

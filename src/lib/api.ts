@@ -326,7 +326,31 @@ export const api = {
         source: transaction.source || '',
         transaction_datetime: transaction.transaction_datetime || new Date().toISOString(),
         creation_datetime: transaction.creation_datetime || new Date().toISOString(),
-        updated_datetime: transaction.updated_datetime || new Date().toISOString(),
+        updated_datetime: new Date().toISOString(),
+      }),
+    });
+  },
+
+  async updateTransaction(
+    userId: string,
+    walletId: string,
+    transaction: Partial<WalletTransaction> & { id: string }
+  ): Promise<WalletTransaction> {
+    return request<WalletTransaction>(`/users/${userId}/wallets/${walletId}/transactions`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        id: transaction.id,
+        wallet: transaction.wallet || { id: walletId },
+        category: transaction.category,
+        amount: Number(transaction.amount) || 0,
+        type: transaction.type || 'EXPENSE',
+        status: transaction.status || 'COMPLETED',
+        description: transaction.description || '',
+        reference: transaction.reference || '',
+        source: transaction.source || '',
+        transaction_datetime: transaction.transaction_datetime || new Date().toISOString(),
+        creation_datetime: transaction.creation_datetime || new Date().toISOString(),
+        updated_datetime: new Date().toISOString(),
       }),
     });
   },
@@ -909,6 +933,22 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
       if (body.category && body.category.id) {
         category = demoCategories.find(c => c.id === body.category.id) || null;
       }
+
+      if (body.id) {
+        const existingTx = demoTransactions.find(t => t.id === body.id);
+        if (existingTx) {
+          existingTx.amount = Number(body.amount) || existingTx.amount;
+          existingTx.type = body.type || existingTx.type;
+          existingTx.status = body.status || existingTx.status;
+          existingTx.description = body.description || existingTx.description;
+          if (category) existingTx.category = category;
+          if (body.reference) existingTx.reference = body.reference;
+          if (body.source) existingTx.source = body.source;
+          existingTx.updated_datetime = new Date().toISOString();
+          return existingTx as unknown as T;
+        }
+      }
+
       const newTx: WalletTransaction = {
         id: `tx-${Date.now()}`,
         wallet,
