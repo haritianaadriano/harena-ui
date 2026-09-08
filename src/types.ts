@@ -11,6 +11,18 @@ export type TransactionType = 'INCOME' | 'EXPENSE' | 'TRANSFER' | 'REFUND' | 'SU
 
 export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
+export type Page = number;
+export type PageSize = number;
+
+export interface TransactionFilterParams {
+  from?: string;
+  to?: string;
+  status?: TransactionStatus;
+  type?: TransactionType;
+  page?: Page;
+  page_size?: PageSize;
+}
+
 export type GoalStatus = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 export type BudgetPeriod = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';

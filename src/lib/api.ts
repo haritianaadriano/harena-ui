@@ -18,7 +18,10 @@ import {
   TransactionType,
   TransactionStatus,
   BudgetPeriod,
-  GoalStatus
+  GoalStatus,
+  Page,
+  PageSize,
+  TransactionFilterParams
 } from '../types';
 
 export function formatCurrency(amount: number, currency: string): string {
@@ -295,16 +298,31 @@ export const api = {
   async getTransactions(
     userId: string,
     walletId: string,
-    filters?: { from?: string; to?: string; status?: TransactionStatus; type?: TransactionType }
+    filters?: TransactionFilterParams
   ): Promise<WalletTransaction[]> {
     const params = new URLSearchParams();
     if (filters?.from) params.append('from', filters.from);
     if (filters?.to) params.append('to', filters.to);
     if (filters?.status) params.append('status', filters.status);
     if (filters?.type) params.append('type', filters.type);
+    if (filters?.page !== undefined && filters?.page !== null) {
+      params.append('page', filters.page.toString());
+    }
+    if (filters?.page_size !== undefined && filters?.page_size !== null) {
+      params.append('page_size', filters.page_size.toString());
+    }
     const query = params.toString() ? `?${params.toString()}` : '';
     const res = await request<WalletTransaction[]>(`/users/${userId}/wallets/${walletId}/transactions${query}`);
     return Array.isArray(res) ? res : [];
+  },
+
+  async getTransactionCount(
+    userId: string,
+    walletId: string,
+    filters?: Omit<TransactionFilterParams, 'page' | 'page_size'>
+  ): Promise<number> {
+    const all = await this.getTransactions(userId, walletId, filters);
+    return all.length;
   },
 
   async createTransaction(
@@ -708,6 +726,160 @@ const mockTransactions: WalletTransaction[] = [
     creation_datetime: '2026-07-01T00:05:00Z',
     updated_datetime: '2026-07-01T00:05:00Z',
   },
+  {
+    id: 'tx-8',
+    wallet: mockWallets[0],
+    category: mockCategories[5],
+    amount: 320000,
+    type: 'EXPENSE',
+    status: 'COMPLETED',
+    description: 'Facture Électricité & Eau (JIRAMA)',
+    reference: 'FAC-2026-07',
+    source: 'Jirama Direct',
+    transaction_datetime: '2026-07-06T11:20:00Z',
+    creation_datetime: '2026-07-06T11:20:00Z',
+    updated_datetime: '2026-07-06T11:20:00Z',
+  },
+  {
+    id: 'tx-9',
+    wallet: mockWallets[0],
+    category: mockCategories[4],
+    amount: 45000,
+    type: 'SUBSCRIPTION',
+    status: 'COMPLETED',
+    description: 'Abonnement Spotify Family',
+    reference: 'SPOT-JUL-26',
+    source: 'Spotify AB',
+    transaction_datetime: '2026-07-07T03:00:00Z',
+    creation_datetime: '2026-07-07T03:00:00Z',
+    updated_datetime: '2026-07-07T03:00:00Z',
+  },
+  {
+    id: 'tx-10',
+    wallet: mockWallets[0],
+    category: mockCategories[1],
+    amount: 95000,
+    type: 'EXPENSE',
+    status: 'COMPLETED',
+    description: 'Course Taxi VTC aéroport',
+    reference: 'VTC-8819',
+    source: 'VTC Express',
+    transaction_datetime: '2026-07-07T14:40:00Z',
+    creation_datetime: '2026-07-07T14:40:00Z',
+    updated_datetime: '2026-07-07T14:40:00Z',
+  },
+  {
+    id: 'tx-11',
+    wallet: mockWallets[0],
+    category: mockCategories[0],
+    amount: 145000,
+    type: 'EXPENSE',
+    status: 'COMPLETED',
+    description: 'Marché aux légumes frais',
+    reference: 'MKT-3301',
+    source: 'Marché Central',
+    transaction_datetime: '2026-07-08T09:15:00Z',
+    creation_datetime: '2026-07-08T09:15:00Z',
+    updated_datetime: '2026-07-08T09:15:00Z',
+  },
+  {
+    id: 'tx-12',
+    wallet: mockWallets[0],
+    category: mockCategories[3],
+    amount: 350000,
+    type: 'INCOME',
+    status: 'COMPLETED',
+    description: 'Vente matériel informatique',
+    reference: 'OCC-9921',
+    source: 'Particulier',
+    transaction_datetime: '2026-07-08T16:00:00Z',
+    creation_datetime: '2026-07-08T16:00:00Z',
+    updated_datetime: '2026-07-08T16:00:00Z',
+  },
+  {
+    id: 'tx-13',
+    wallet: mockWallets[0],
+    category: mockCategories[0],
+    amount: 110000,
+    type: 'EXPENSE',
+    status: 'PENDING',
+    description: 'Commande repas UberEats',
+    reference: 'UBER-9923',
+    source: 'Uber Portier',
+    transaction_datetime: '2026-07-09T19:45:00Z',
+    creation_datetime: '2026-07-09T19:45:00Z',
+    updated_datetime: '2026-07-09T19:45:00Z',
+  },
+  {
+    id: 'tx-14',
+    wallet: mockWallets[0],
+    category: mockCategories[2],
+    amount: 85000,
+    type: 'EXPENSE',
+    status: 'COMPLETED',
+    description: 'Places de cinéma IMAX',
+    reference: 'CINE-4421',
+    source: 'Cinéma Rex',
+    transaction_datetime: '2026-07-10T21:00:00Z',
+    creation_datetime: '2026-07-10T21:00:00Z',
+    updated_datetime: '2026-07-10T21:00:00Z',
+  },
+  {
+    id: 'tx-15',
+    wallet: mockWallets[0],
+    category: mockCategories[0],
+    amount: 48000,
+    type: 'REFUND',
+    status: 'COMPLETED',
+    description: 'Remboursement article retourné',
+    reference: 'REF-RET-09',
+    source: 'Carrefour Paris',
+    transaction_datetime: '2026-07-11T10:30:00Z',
+    creation_datetime: '2026-07-11T10:30:00Z',
+    updated_datetime: '2026-07-11T10:30:00Z',
+  },
+  {
+    id: 'tx-16',
+    wallet: mockWallets[0],
+    category: mockCategories[5],
+    amount: 120000,
+    type: 'EXPENSE',
+    status: 'CANCELLED',
+    description: 'Assurance habitation annuelle (annulée)',
+    reference: 'ASSUR-CNL-01',
+    source: 'Assurance Santé & Habitation',
+    transaction_datetime: '2026-07-11T15:20:00Z',
+    creation_datetime: '2026-07-11T15:20:00Z',
+    updated_datetime: '2026-07-11T15:20:00Z',
+  },
+  {
+    id: 'tx-17',
+    wallet: mockWallets[0],
+    category: mockCategories[1],
+    amount: 60000,
+    type: 'EXPENSE',
+    status: 'FAILED',
+    description: 'Péage autoroute (échec paiement carte)',
+    reference: 'PEAGE-FAIL-02',
+    source: 'Autoroute du Sud',
+    transaction_datetime: '2026-07-12T07:10:00Z',
+    creation_datetime: '2026-07-12T07:10:00Z',
+    updated_datetime: '2026-07-12T07:10:00Z',
+  },
+  {
+    id: 'tx-18',
+    wallet: mockWallets[0],
+    category: mockCategories[3],
+    amount: 1200000,
+    type: 'INCOME',
+    status: 'COMPLETED',
+    description: 'Bonus performance trimestriel',
+    reference: 'BONUS-Q2',
+    source: 'Employeur SA',
+    transaction_datetime: '2026-07-12T17:00:00Z',
+    creation_datetime: '2026-07-12T17:00:00Z',
+    updated_datetime: '2026-07-12T17:00:00Z',
+  },
 ];
 
 const mockBudgets: Budget[] = [
@@ -827,10 +999,12 @@ let demoGoals = [...mockGoals];
 
 function handleDemoRequest<T>(path: string, options: RequestInit): T {
   // Parsing parameters and pathways
-  const parts = path.split('/').filter(Boolean); // e.g. ["users", "usr-id", "wallets"]
+  const [cleanPath, queryString] = path.split('?');
+  const parts = cleanPath.split('/').filter(Boolean); // e.g. ["users", "usr-id", "wallets"]
+  const queryParams = new URLSearchParams(queryString || '');
 
   // POST /auth/signin
-  if (path === '/auth/signin') {
+  if (cleanPath === '/auth/signin') {
     return { access_token: 'demo-token-12345', user: mockUser } as unknown as T;
   }
   // POST /auth/signup
@@ -990,7 +1164,52 @@ function handleDemoRequest<T>(path: string, options: RequestInit): T {
       return newTx as unknown as T;
     }
 
-    return demoTransactions.filter(t => t.wallet.id === walletId) as unknown as T;
+    let results = demoTransactions.filter(t => t.wallet.id === walletId);
+
+    // Filter by type
+    const filterType = queryParams.get('type');
+    if (filterType) {
+      results = results.filter(t => t.type === filterType);
+    }
+
+    // Filter by status
+    const filterStatus = queryParams.get('status');
+    if (filterStatus) {
+      results = results.filter(t => t.status === filterStatus);
+    }
+
+    // Filter by from date-time
+    const fromParam = queryParams.get('from');
+    if (fromParam) {
+      const fromTime = new Date(fromParam).getTime();
+      if (!isNaN(fromTime)) {
+        results = results.filter(t => new Date(t.transaction_datetime).getTime() >= fromTime);
+      }
+    }
+
+    // Filter by to date-time
+    const toParam = queryParams.get('to');
+    if (toParam) {
+      const toTime = new Date(toParam).getTime();
+      if (!isNaN(toTime)) {
+        results = results.filter(t => new Date(t.transaction_datetime).getTime() <= toTime);
+      }
+    }
+
+    // Sort by transaction_datetime descending
+    results.sort((a, b) => new Date(b.transaction_datetime).getTime() - new Date(a.transaction_datetime).getTime());
+
+    // Pagination: page and page_size
+    const pageParam = queryParams.get('page');
+    const pageSizeParam = queryParams.get('page_size');
+    if (pageParam !== null || pageSizeParam !== null) {
+      const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
+      const pageSize = Math.max(1, parseInt(pageSizeParam || '10', 10) || 10);
+      const startIndex = (page - 1) * pageSize;
+      results = results.slice(startIndex, startIndex + pageSize);
+    }
+
+    return results as unknown as T;
   }
 
   // GET /users/{user_id}/categories

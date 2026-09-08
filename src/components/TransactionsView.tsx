@@ -9,8 +9,9 @@ import { User, Wallet, WalletTransaction, TransactionCategory, TransactionType, 
 import { 
   Plus, Calendar, Filter, Sparkles, AlertTriangle, 
   CheckCircle2, XCircle, Clock, Info, ShieldCheck, 
-  HelpCircle, ChevronRight, CornerDownRight, ArrowUpRight, ArrowDownLeft,
-  Pencil, Check
+  HelpCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  CornerDownRight, ArrowUpRight, ArrowDownLeft,
+  Pencil, Check, RotateCcw
 } from 'lucide-react';
 import * as Icons from 'lucide-react';
 
@@ -32,6 +33,11 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
   const [filterStatus, setFilterStatus] = useState<TransactionStatus | ''>('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
   // AI analysis state for the selected transaction
   const [analysis, setAnalysis] = useState<TransactionAnalysis | null>(null);
@@ -270,18 +276,27 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
     initData();
   }, [currentUser.id]);
 
-  // Load transactions based on selected wallet & filters
+  // Load transactions based on selected wallet & filters with pagination
   const loadTransactions = async () => {
     if (!selectedWallet) return;
     try {
       setLoading(true);
-      const filters: any = {};
-      if (filterType) filters.type = filterType;
-      if (filterStatus) filters.status = filterStatus;
-      if (fromDate) filters.from = new Date(fromDate).toISOString();
-      if (toDate) filters.to = new Date(toDate).toISOString();
+      const baseFilters: any = {};
+      if (filterType) baseFilters.type = filterType;
+      if (filterStatus) baseFilters.status = filterStatus;
+      if (fromDate) baseFilters.from = new Date(`${fromDate}T00:00:00.000Z`).toISOString();
+      if (toDate) baseFilters.to = new Date(`${toDate}T23:59:59.999Z`).toISOString();
 
-      const txs = await api.getTransactions(currentUser.id, selectedWallet.id, filters);
+      const [count, txs] = await Promise.all([
+        api.getTransactionCount(currentUser.id, selectedWallet.id, baseFilters),
+        api.getTransactions(currentUser.id, selectedWallet.id, {
+          ...baseFilters,
+          page: currentPage,
+          page_size: pageSize
+        })
+      ]);
+
+      setTotalCount(count);
       setTransactions(txs);
     } catch (err) {
       console.error('Error fetching transactions', err);
@@ -290,9 +305,25 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
     }
   };
 
+  // Reset page to 1 when wallet or filters or pageSize change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedWallet?.id, filterType, filterStatus, fromDate, toDate, pageSize]);
+
+  // Reload transactions when wallet, filters, page or user change
   useEffect(() => {
     loadTransactions();
-  }, [selectedWallet, filterType, filterStatus, fromDate, toDate, currentUser.id]);
+  }, [selectedWallet?.id, filterType, filterStatus, fromDate, toDate, currentPage, pageSize, currentUser.id]);
+
+  const handleResetFilters = () => {
+    setFilterType('');
+    setFilterStatus('');
+    setFromDate('');
+    setToDate('');
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = Boolean(filterType || filterStatus || fromDate || toDate);
 
   // Safety hook to auto-select the first category if txCategoryId is empty/invalid
   useEffect(() => {
@@ -527,7 +558,7 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Depuis le</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Depuis le (From)</label>
             <input
               type="date"
               value={fromDate}
@@ -537,7 +568,20 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Jusqu'au</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Jusqu'au (To)</label>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Réinitialiser les filtres"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>Effacer</span>
+                </button>
+              )}
+            </div>
             <input
               type="date"
               value={toDate}
@@ -554,7 +598,33 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
         
         {/* Left Side: Ledger */}
         <div className="bg-[#0b1329] p-6 rounded-3xl border border-slate-800/80 shadow-sm lg:col-span-2 space-y-4">
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest pl-1">Mouvements bancaires</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/60 pb-3">
+            <div className="flex items-center gap-2.5">
+              <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest pl-1">Mouvements bancaires</h3>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                {totalCount} transaction{totalCount > 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {/* Page Size Selector */}
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <label htmlFor="tx-page-size" className="text-[11px] text-slate-400 whitespace-nowrap">Afficher :</label>
+              <select
+                id="tx-page-size"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-2.5 py-1 bg-[#131c35] border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer"
+              >
+                <option value={5} className="bg-[#0b1329] text-white">5 par page</option>
+                <option value={10} className="bg-[#0b1329] text-white">10 par page</option>
+                <option value={20} className="bg-[#0b1329] text-white">20 par page</option>
+                <option value={50} className="bg-[#0b1329] text-white">50 par page</option>
+              </select>
+            </div>
+          </div>
           
           {loading ? (
             <div className="py-12 text-center">
@@ -567,84 +637,204 @@ export default function TransactionsView({ currentUser, selectedTx, setSelectedT
               </div>
               <h4 className="font-semibold text-xs text-slate-400">Aucune transaction trouvée</h4>
               <p className="text-[11px] text-slate-500 max-w-xs mx-auto">Essayez d'ajuster vos filtres de recherche ou sélectionnez un autre portefeuille.</p>
+              {hasActiveFilters && (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-3 py-1.5 text-xs bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25 border border-cyan-500/30 rounded-xl font-medium cursor-pointer transition-all inline-flex items-center gap-1.5"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Réinitialiser les filtres</span>
+                </button>
+              )}
             </div>
           ) : (
-            <div className="divide-y divide-slate-800/60">
-              {transactions.map((tx) => {
-                const isExpense = tx.type === 'EXPENSE' || tx.type === 'SUBSCRIPTION';
-                const isSelected = selectedTx?.id === tx.id;
-                
-                return (
-                  <div
-                    key={tx.id}
-                    onClick={() => setSelectedTx(tx)}
-                    className={`flex items-center justify-between py-3.5 px-3 rounded-2xl cursor-pointer transition-all border ${
-                      isSelected 
-                        ? 'bg-[#131f3d] border-cyan-500 shadow-xs' 
-                        : 'border-transparent hover:bg-[#131c35]/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0"
-                        style={{ 
-                          backgroundColor: tx.category ? `${tx.category.color}15` : '#94a3b815', 
-                          color: tx.category ? tx.category.color : '#94a3b8' 
-                        }}
-                      >
-                        <CategoryIcon iconName={tx.category ? tx.category.icon : 'Tag'} className="h-4 w-4" />
+            <>
+              <div className="divide-y divide-slate-800/60">
+                {transactions.map((tx) => {
+                  const isExpense = tx.type === 'EXPENSE' || tx.type === 'SUBSCRIPTION';
+                  const isSelected = selectedTx?.id === tx.id;
+                  
+                  return (
+                    <div
+                      key={tx.id}
+                      onClick={() => setSelectedTx(tx)}
+                      className={`flex items-center justify-between py-3.5 px-3 rounded-2xl cursor-pointer transition-all border ${
+                        isSelected 
+                          ? 'bg-[#131f3d] border-cyan-500 shadow-xs' 
+                          : 'border-transparent hover:bg-[#131c35]/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-semibold shrink-0"
+                          style={{ 
+                            backgroundColor: tx.category ? `${tx.category.color}15` : '#94a3b815', 
+                            color: tx.category ? tx.category.color : '#94a3b8' 
+                          }}
+                        >
+                          <CategoryIcon iconName={tx.category ? tx.category.icon : 'Tag'} className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-slate-200 text-sm group-hover:text-white transition-colors">{tx.description}</h4>
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <span className="font-semibold" style={{ color: tx.category ? tx.category.color : '#94a3b8' }}>
+                              {tx.category ? tx.category.name : 'Sans catégorie'}
+                            </span>
+                            <span>•</span>
+                            <span className="font-mono">{new Date(tx.transaction_datetime).toLocaleDateString('fr-FR', {day: 'numeric', month: 'short'})}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-semibold text-slate-200 text-sm group-hover:text-white transition-colors">{tx.description}</h4>
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                          <span className="font-semibold" style={{ color: tx.category ? tx.category.color : '#94a3b8' }}>
-                            {tx.category ? tx.category.name : 'Sans catégorie'}
-                          </span>
-                          <span>•</span>
-                          <span className="font-mono">{new Date(tx.transaction_datetime).toLocaleDateString('fr-FR', {day: 'numeric', month: 'short'})}</span>
+
+                      <div className="text-right space-y-1 shrink-0">
+                        <div className={`font-bold text-sm ${isExpense ? 'text-slate-300' : 'text-cyan-400 font-sans'}`}>
+                          {isExpense ? '-' : '+'}{formatCurrency(tx.amount, tx.wallet.currency)}
+                        </div>
+                        <div className="flex items-center gap-1.5 justify-end">
+                          {tx.status === 'PENDING' ? (
+                            <button
+                              onClick={(e) => handleQuickStatusChange(tx, 'COMPLETED', e)}
+                              title="Cliquer pour passer en Complété"
+                              className="px-2 py-0.5 bg-amber-500/20 text-amber-300 hover:bg-cyan-500/20 hover:text-cyan-300 border border-amber-500/30 hover:border-cyan-500/40 rounded-md text-[9px] font-bold uppercase font-mono flex items-center gap-1 transition-all cursor-pointer group/btn shadow-xs"
+                            >
+                              <Clock className="h-3 w-3 text-amber-400 group-hover/btn:hidden animate-pulse" />
+                              <CheckCircle2 className="h-3 w-3 text-cyan-400 hidden group-hover/btn:block" />
+                              <span>En attente → Compléter</span>
+                            </button>
+                          ) : (
+                            <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase font-mono flex items-center gap-1 ${getStatusStyle(tx.status)}`}>
+                              {getStatusIcon(tx.status)}
+                              <span>{tx.status}</span>
+                            </span>
+                          )}
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTx(tx);
+                              handleOpenEditModal(tx);
+                            }}
+                            title="Éditer la transaction"
+                            className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800/80 rounded-lg transition-all cursor-pointer"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
 
-                    <div className="text-right space-y-1 shrink-0">
-                      <div className={`font-bold text-sm ${isExpense ? 'text-slate-300' : 'text-cyan-400 font-sans'}`}>
-                        {isExpense ? '-' : '+'}{formatCurrency(tx.amount, tx.wallet.currency)}
-                      </div>
-                      <div className="flex items-center gap-1.5 justify-end">
-                        {tx.status === 'PENDING' ? (
-                          <button
-                            onClick={(e) => handleQuickStatusChange(tx, 'COMPLETED', e)}
-                            title="Cliquer pour passer en Complété"
-                            className="px-2 py-0.5 bg-amber-500/20 text-amber-300 hover:bg-cyan-500/20 hover:text-cyan-300 border border-amber-500/30 hover:border-cyan-500/40 rounded-md text-[9px] font-bold uppercase font-mono flex items-center gap-1 transition-all cursor-pointer group/btn shadow-xs"
-                          >
-                            <Clock className="h-3 w-3 text-amber-400 group-hover/btn:hidden animate-pulse" />
-                            <CheckCircle2 className="h-3 w-3 text-cyan-400 hidden group-hover/btn:block" />
-                            <span>En attente → Compléter</span>
-                          </button>
-                        ) : (
-                          <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase font-mono flex items-center gap-1 ${getStatusStyle(tx.status)}`}>
-                            {getStatusIcon(tx.status)}
-                            <span>{tx.status}</span>
-                          </span>
-                        )}
+              {/* Pagination Bar */}
+              {totalCount > 0 && (() => {
+                const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+                const startItem = (currentPage - 1) * pageSize + 1;
+                const endItem = Math.min(totalCount, currentPage * pageSize);
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTx(tx);
-                            handleOpenEditModal(tx);
-                          }}
-                          title="Éditer la transaction"
-                          className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800/80 rounded-lg transition-all cursor-pointer"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
+                const getPages = () => {
+                  const pages: (number | string)[] = [];
+                  if (totalPages <= 7) {
+                    for (let i = 1; i <= totalPages; i++) pages.push(i);
+                  } else {
+                    if (currentPage <= 4) {
+                      pages.push(1, 2, 3, 4, 5, '...', totalPages);
+                    } else if (currentPage >= totalPages - 3) {
+                      pages.push(1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+                    } else {
+                      pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+                    }
+                  }
+                  return pages;
+                };
+
+                const pages = getPages();
+
+                return (
+                  <div className="pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <div className="text-slate-400 text-xs">
+                      Affichage de <span className="font-semibold text-slate-200">{startItem}</span> à <span className="font-semibold text-slate-200">{endItem}</span> sur <span className="font-semibold text-cyan-400">{totalCount}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {/* First Page */}
+                      <button
+                        id="btn-page-first"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1 || loading}
+                        title="Première page"
+                        className="p-1.5 rounded-lg border border-slate-800 bg-[#131c35] text-slate-400 hover:text-white hover:bg-[#1c294a] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </button>
+
+                      {/* Prev Page */}
+                      <button
+                        id="btn-page-prev"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1 || loading}
+                        title="Page précédente"
+                        className="p-1.5 rounded-lg border border-slate-800 bg-[#131c35] text-slate-400 hover:text-white hover:bg-[#1c294a] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+
+                      {/* Page Numbers */}
+                      <div className="flex items-center gap-1 mx-1">
+                        {pages.map((p, idx) => {
+                          if (p === '...') {
+                            return (
+                              <span key={`ellipsis-${idx}`} className="px-1.5 text-slate-500 font-mono text-xs">
+                                ...
+                              </span>
+                            );
+                          }
+                          const pageNum = Number(p);
+                          const isActive = pageNum === currentPage;
+                          return (
+                            <button
+                              key={`page-${pageNum}`}
+                              id={`btn-page-${pageNum}`}
+                              onClick={() => setCurrentPage(pageNum)}
+                              disabled={loading}
+                              className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                                isActive
+                                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold shadow-xs shadow-cyan-500/30'
+                                  : 'border-slate-800 bg-[#131c35] text-slate-300 hover:bg-[#1c294a] hover:text-white'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
                       </div>
+
+                      {/* Next Page */}
+                      <button
+                        id="btn-page-next"
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage >= totalPages || loading}
+                        title="Page suivante"
+                        className="p-1.5 rounded-lg border border-slate-800 bg-[#131c35] text-slate-400 hover:text-white hover:bg-[#1c294a] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+
+                      {/* Last Page */}
+                      <button
+                        id="btn-page-last"
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage >= totalPages || loading}
+                        title="Dernière page"
+                        className="p-1.5 rounded-lg border border-slate-800 bg-[#131c35] text-slate-400 hover:text-white hover:bg-[#1c294a] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })()}
+            </>
           )}
         </div>
 
